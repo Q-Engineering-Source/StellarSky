@@ -114,8 +114,10 @@ final class ExtendedCatalogueLoader {
 	}
 
 	private static float starDisplayBrightness(float magnitude) {
+		// Keep the actual logarithmic flux. A brightness floor makes every
+		// faint catalogue star bloom like a bright star in the HDR pass.
 		double flux = Math.pow(10.0, -0.4 * (magnitude + 0.5));
-		return (float) Math.min(4.0, 0.018 + 0.85 * Math.sqrt(flux));
+		return (float) Math.min(4.0, flux);
 	}
 
 	static CatalogueBuffer loadDeepSky(float magnitudeLimit) throws IOException {
@@ -153,9 +155,10 @@ final class ExtendedCatalogueLoader {
 						double ra = Double.parseDouble(fields[1].trim());
 						double dec = Double.parseDouble(fields[2].trim());
 						float majorArcMinutes = Float.parseFloat(fields[7].trim());
-						float angularSize = Math.max(0.02f,
-								Math.min(8.0f, majorArcMinutes / 60.0f));
-						float brightness = deepSkyDisplayBrightness(magnitude);
+						float minorArcMinutes = Float.parseFloat(fields[8].trim());
+						float angularSize = deepSkyAngularSize(type, majorArcMinutes);
+						float brightness = deepSkyDisplayBrightness(magnitude,
+								majorArcMinutes, minorArcMinutes);
 						float[] color = deepSkyColor(type);
 						Vector3 pos = new SpCoord(ra, dec).getVec();
 						builder.pos(pos.getX() * 99.5, pos.getY() * 99.5,
@@ -187,9 +190,36 @@ final class ExtendedCatalogueLoader {
 		return magnitude > 0.0f && magnitude < 90.0f;
 	}
 
-	private static float deepSkyDisplayBrightness(float magnitude) {
-		double flux = Math.pow(10.0, -0.4 * (magnitude - 6.0));
-		return (float) Math.min(0.8, 0.025 + 0.18 * Math.sqrt(flux));
+	private static float deepSkyAngularSize(String type, float majorArcMinutes) {
+		if(!Float.isFinite(majorArcMinutes) || majorArcMinutes <= 0.0f)
+			return 0.02f;
+
+		// Clusters are resolved collections of stars. A multi-degree circular
+		// sprite makes them look like artificial moons.
+		float maxDegrees = isCluster(type) ? 1.5f : 4.0f;
+		return Math.max(0.02f, Math.min(maxDegrees, majorArcMinutes / 60.0f));
+	}
+
+	private static float deepSkyDisplayBrightness(float magnitude, float majorArcMinutes,
+			float minorArcMinutes) {
+		double major = validAngularSize(majorArcMinutes) ? majorArcMinutes : 1.0;
+		double minor = validAngularSize(minorArcMinutes) ? minorArcMinutes : major;
+		double area = Math.max(1.0, Math.PI * major * minor * 0.25);
+
+		// Use integrated magnitude per square arcminute, as Stellarium does
+		// for extended sources, instead of applying total flux to every pixel.
+		double surfaceMagnitude = magnitude + 2.5 * Math.log10(area);
+		double surfaceFlux = Math.pow(10.0, -0.4 * (surfaceMagnitude - 6.0));
+		return (float) Math.min(0.8, Math.max(0.002, 0.18 * Math.sqrt(surfaceFlux)));
+	}
+
+	private static boolean validAngularSize(float value) {
+		return Float.isFinite(value) && value > 0.0f;
+	}
+
+	private static boolean isCluster(String type) {
+		return type.contains("OC") || type.contains("GC") || type.contains("CL")
+				|| type.contains("C+N");
 	}
 
 	private static float[] deepSkyColor(String type) {

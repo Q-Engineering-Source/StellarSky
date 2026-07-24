@@ -9,6 +9,6 @@ uniform float pixelScale;
 void main() {
 	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
 	starColor = gl_Color.rgb;
-	starIntensity = gl_Color.a * brightnessScale;
-	gl_PointSize = clamp(pixelScale * (1.0 + 2.0 * sqrt(max(starIntensity, 0.0))), 1.0, 9.0);
+	starIntensity = clamp(gl_Color.a * brightnessScale, 0.0, 4.0);
+	gl_PointSize = clamp(pixelScale * (1.0 + 1.15 * sqrt(starIntensity)), 1.0, 5.0);
 }
