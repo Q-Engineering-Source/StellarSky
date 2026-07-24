@@ -27,6 +27,7 @@ import stellarapi.api.world.worldset.WorldSet;
 import stellarium.api.StellarSkyAPI;
 import stellarium.client.ClientSettings;
 import stellarium.client.StellarClientFMLHook;
+import stellarium.client.TimeMultiplierHud;
 import stellarium.client.overlay.StellarSkyOverlays;
 import stellarium.client.overlay.clientcfg.OverlayClientSettingsType;
 import stellarium.client.overlay.clock.OverlayClockType;
@@ -70,6 +71,7 @@ public class ClientProxy extends CommonProxy implements IProxy {
 						StellarSkyReferences.GUI_SETTINGS));
 
 		MinecraftForge.EVENT_BUS.register(new StellarClientFMLHook());
+		MinecraftForge.EVENT_BUS.register(new TimeMultiplierHud());
 
 		OverlayRegistry.registerOverlaySet("stellarsky", new StellarSkyOverlays());
 		OverlayRegistry.registerOverlay("clock", new OverlayClockType(), this.guiConfig);
@@ -89,7 +91,6 @@ public class ClientProxy extends CommonProxy implements IProxy {
 	@Override
 	public void postInit(FMLPostInitializationEvent event) {
 		super.postInit(event);
-				
     	celestialManager.initializeClient(this.clientSettings);
 	}
 

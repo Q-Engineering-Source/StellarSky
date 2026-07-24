@@ -110,6 +110,21 @@ public class OverlayClockTexts {
 			return;
 		
 		long currentTick = Minecraft.getMinecraft().world.getWorldTime();
+		if(stellarium.time.StellarSkyTime.isSystemTimeSyncEnabled(Minecraft.getMinecraft().world)) {
+			java.time.LocalDate date = stellarium.time.StellarSkyTime.getSystemCivilDate(currentTick);
+			long civilTick = stellarium.time.StellarSkyTime.getCivilTimeTicks(currentTick);
+			this.yr = date.getYear();
+			this.day = date.getDayOfYear();
+			this.yearToDay = stellarium.time.StellarSkyTime.REAL_TIME_YEAR_DAYS;
+			this.daylength = 24000.0;
+			this.tick = (int) civilTick;
+			this.hour = (int) (civilTick / 1000L);
+			this.minute = (int) ((civilTick % 1000L) * 60L / 1000L);
+			this.totalhour = 24;
+			this.totalminute = 0;
+			this.restMinuteInDay = 0;
+			return;
+		}
 		
 		double dayOffset = periodDay.getOffset(currentTick, partialTicks);
 		double yearOffset = periodYear.getBiasedOffset(currentTick, partialTicks, 0.25);

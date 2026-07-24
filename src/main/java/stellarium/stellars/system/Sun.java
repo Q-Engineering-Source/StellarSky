@@ -4,6 +4,7 @@ import stellarapi.api.CelestialPeriod;
 import stellarapi.api.celestials.EnumObjectType;
 import stellarapi.api.lib.math.Vector3;
 import stellarapi.api.view.ICCoordinates;
+import stellarium.world.StellarCoordinates;
 
 public class Sun extends SolarObject {
 	protected double offset;
@@ -25,6 +26,8 @@ public class Sun extends SolarObject {
 
 	@Override
 	public CelestialPeriod getHorizontalPeriod(ICCoordinates coords) {
+		if(coords instanceof StellarCoordinates && ((StellarCoordinates) coords).isSystemTimeModel())
+			return ((StellarCoordinates) coords).getCivilDayPeriod();
 		CelestialPeriod dayPeriod = coords.getPeriod();
 		double length = 1 / (1 / dayPeriod.getPeriodLength() - 1 / this.yearUnit);
 		return new CelestialPeriod("Day", length, coords.calculateInitialOffset(this.initialEarthPos, length));

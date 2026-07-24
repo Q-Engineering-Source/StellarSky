@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "stellarium.mixin",
+  "refmap": "mixins.stellarsky.refmap.json",
+  "target": "@env(DEFAULT)",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "MixinWorldServer",
+    "MixinWorldWeather"
+  ],
+  "client": [
+    "MixinWorldClient"
+  ]
+}

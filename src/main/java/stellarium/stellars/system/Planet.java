@@ -31,9 +31,9 @@ public class Planet extends SolarObject {
 
 		double period = this.getRevolutionPeriod() * this.yearUnit;
 		this.setAbsolutePeriod(new CelestialPeriod(String.format("Sidereal Period of %s",
-				this.getName().getResourcePath()), period, this.absoluteOffset()));
+				this.getName().getPath()), period, this.absoluteOffset()));
 		this.setPhasePeriod(new CelestialPeriod(String.format("Synodic Period of %s",
-				this.getName().getResourcePath()), 1/(1/period - 1/this.yearUnit), this.phaseOffset()));
+				this.getName().getPath()), 1/(1/period - 1/this.yearUnit), this.phaseOffset()));
 	}
 
 	@Override
@@ -42,7 +42,7 @@ public class Planet extends SolarObject {
 		double synodicLength = 1/(1/period - 1/this.yearUnit);
 		CelestialPeriod dayPeriod = coords.getPeriod();
 		double length = 1 / (1 / dayPeriod.getPeriodLength() - 1 / synodicLength);
-		return new CelestialPeriod(String.format("Day for %s", this.getName().getResourcePath()),
+		return new CelestialPeriod(String.format("Day for %s", this.getName().getPath()),
 				length, coords.calculateInitialOffset(this.initialEarthPos, length));
 	}
 

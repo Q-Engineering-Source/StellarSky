@@ -21,6 +21,8 @@ import stellarium.api.SkyRenderTypeSurface;
 import stellarium.api.SkySetTypeDefault;
 import stellarium.api.StellarSkyAPI;
 import stellarium.command.CommandLock;
+import stellarium.command.CommandAstronomicalTime;
+import stellarium.command.CommandStellarTime;
 import stellarium.render.adapt.SkyRenderTypeEnd;
 import stellarium.render.adapt.SkySetTypeEnd;
 import stellarium.sync.StellarNetworkManager;
@@ -108,6 +110,10 @@ public class StellarSky {
 	@Mod.EventHandler
 	public void serverStarting(FMLServerStartingEvent event) {
 		event.registerServerCommand(new CommandLock());
+		event.registerServerCommand(new CommandStellarTime());
+		// StellarAPI registers its tick-based replacement first. Register this
+		// afterwards so /time uses the same civil-time model as /stellartime.
+		event.registerServerCommand(new CommandAstronomicalTime());
 	}
 
 

@@ -1,132 +1,83 @@
-buildscript {
-    repositories {
-        jcenter()
-        maven {
-            name = "forge"
-            url = "http://files.minecraftforge.net/maven"
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'maven-publish'
+    id 'xyz.wagyourtail.unimined' version '1.4.26-kappa'
+}
+
+version = mod_version
+group = root_package
+base { archivesName = mod_id }
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(25) }
+    withSourcesJar()
+}
+
+configurations {
+    modCompileOnly
+    compileOnly.extendsFrom(modCompileOnly)
+    modRuntimeOnly
+    runtimeOnly.extendsFrom(modRuntimeOnly)
+}
+
+unimined.minecraft {
+    version '1.12.2'
+    mappings { mcp('stable', '39-1.12') }
+    cleanroom {
+        loader '0.6.1-alpha'
+        runs.all {
+            args += ['--username', minecraft_username]
+            systemProperty('fml.noSplash', 'true')
+            if (is_coremod.toBoolean()) systemProperty('fml.coreMods.load', coremod_plugin_class_name)
         }
     }
-    dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
+    defaultRemapJar = false
+    remap(tasks.named('jar').get())
+    mods {
+        remap(configurations.modCompileOnly)
+        remap(configurations.modRuntimeOnly)
     }
 }
-
-plugins {
-    id "com.jfrog.bintray" version "1.8.4"
-}
-
-apply plugin: 'net.minecraftforge.gradle.forge'
-apply plugin: 'maven-publish'
 
 repositories {
-    maven {
-        url "https://dl.bintray.com/abastro/StellarMods"
-    }
-}
-
-ext.config = parseConfig(file('build.properties'))
-
-ext.modversion = "${config.version.stellarsky.major}.${config.version.stellarsky.minor}.${config.version.stellarsky.revis}.${config.version.stellarsky.patch}"
-
-version = "${config.version.minecraft}-${modversion}"
-
-group= "${config.group}"
-archivesBaseName = "${config.archive}"
-
-minecraft {
-    version = "${config.version.minecraft}-${config.version.forge}"
-    runDir = "run"
-    mappings = "${config.version.mcpmappings}"
-
-    replace "@VERSION@", project.version
-}
-
-eclipse.project {
-  buildCommand 'org.eclipse.buildship.core.gradleprojectbuilder'
-  natures 'org.eclipse.buildship.core.gradleprojectnature'
-}
-
-idea.module {
-  downloadJavadoc = true
-  //inheritOutputDirs = true
+    mavenCentral()
+    mavenLocal()
+    maven { url = 'https://jitpack.io' }
+    maven { url = 'https://curse.cleanroommc.com' }
 }
 
 dependencies {
-    deobfCompile 'stellarapi.api:stellarapi:1.12.2-0.5.2.2'
-}
-
-//rootProject.tasks.getByName('build').dependsOn bintrayUpload
-
-publishing {
-    publications {
-        MavenJar(MavenPublication) {
-            from components.java
-            artifact sourceJar
-            groupId "${config.group}"
-            artifactId "${config.artifact}"
-            version "${config.version.minecraft}-${modversion}"
-        }
-    }
-}
-
-bintray {
-    user = System.getenv('BINTRAY_USER')
-    key = System.getenv('BINTRAY_KEY')
-    dryRun = "${config.dryRun}".toBoolean() // Whether to run this as dry-run, without deploying
-    publish = "${config.publish}".toBoolean() // If version should be auto published after an upload
-    pkg {
-        repo = 'StellarMods'
-        name = 'stellarsky'
-        licenses = ['MIT']
-        websiteUrl = 'https://github.com/MinecraftModDevelopmentMods/StellarSky'
-        issueTrackerUrl = 'https://github.com/MinecraftModDevelopmentMods/StellarSky/issues'
-        vcsUrl = 'https://github.com/MinecraftModDevelopmentMods/StellarSky.git'
-        version {
-            name = "${config.version.minecraft}-${modversion}"
-        }
-    }
-    publications = ['MavenJar']
-}
-
-task deobfJar(type: Jar) {
-    from sourceSets.main.output
-    classifier = 'deobf'
-}
-
-task srcJar(type: Jar) {
-    from sourceSets.main.allSource
-    classifier = 'sources'
-}
-
-def parseConfig(File config) {
-    config.withReader {
-        def prop = new Properties()
-        prop.load(it)
-        return (new ConfigSlurper().parse(prop))
-    }
+    compileOnly 'com.cleanroommc:sponge-mixin:0.20.13+mixin.0.8.7'
+    compileOnly 'com.cleanroommc:lwjglx:1.0.0'
+    modCompileOnly project(':stellarapi')
+    modRuntimeOnly files('../StellarAPI/build/libs/stellarapi-1.12.2-0.5.2.2.jar')
 }
 
 processResources {
-    // this will ensure that this task is redone when the versions change.
-    inputs.property "version", project.version
-    inputs.property "mcversion", project.minecraft.version
-
-    // replace stuff in mcmod.info, nothing else
-    from(sourceSets.main.resources.srcDirs) {
-        include 'mcmod.info'
-                
-        // replace version and mcversion
-        expand 'version':project.version, 'mcversion':project.minecraft.version
-    }
-
-    // copy everything else, thats not the mcmod.info
-    from(sourceSets.main.resources.srcDirs) {
-        exclude 'mcmod.info'
-    }
+    def metadata = [version: project.version, mcversion: '1.12.2']
+    inputs.properties(metadata)
+    filesMatching('mcmod.info') { expand(metadata) }
 }
 
-artifacts {
-    archives deobfJar 
-    archives srcJar
-    archives jar
+compileJava {
+    sourceCompatibility = targetCompatibility = JavaVersion.VERSION_25
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+jar {
+    archiveClassifier = 'dev'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes(
+                'ModType': 'CRL',
+                'FMLCorePlugin': coremod_plugin_class_name,
+                'FMLCorePluginContainsFMLMod': true,
+                'Fabric-Loom-Mixin-Remap-Type': 'mixin'
+        )
+    }
+    finalizedBy tasks.named('remapJar')
 }

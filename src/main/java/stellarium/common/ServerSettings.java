@@ -6,6 +6,7 @@ import stellarapi.api.lib.config.INBTConfig;
 import stellarapi.api.lib.config.SimpleHierarchicalNBTConfig;
 import stellarapi.api.lib.config.property.ConfigProperty;
 import stellarapi.api.lib.config.property.ConfigPropertyDouble;
+import stellarapi.api.lib.config.property.ConfigPropertyBoolean;
 import stellarapi.api.lib.config.property.ConfigPropertyInteger;
 import stellarium.stellars.layer.StellarLayerRegistry;
 
@@ -13,10 +14,16 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
 	public double day, year;
 	public int yearOffset, dayOffset;
 	public double tickOffset;
+	public double timeMultiplier;
+	public boolean systemTimeSync;
+	public int systemTimeSyncIntervalSeconds;
 
 	private ConfigPropertyDouble propDay, propYear;
 	private ConfigPropertyInteger propYearOffset, propDayOffset;
 	private ConfigPropertyDouble propTickOffset;
+	private ConfigPropertyDouble propTimeMultiplier;
+	private ConfigPropertyBoolean propSystemTimeSync;
+	private ConfigPropertyInteger propSystemTimeSyncInterval;
 	//private ConfigPropertyInteger propStartingYear, propClockDateOffset;
 	public ConfigPropertyDouble propAxialTilt, propPrecession;
 
@@ -31,6 +38,10 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
         this.propYearOffset = new ConfigPropertyInteger("Year_Offset", "yearOffset", 0);
         this.propDayOffset = new ConfigPropertyInteger("Day_Offset", "dayOffset", 0);
         this.propTickOffset = new ConfigPropertyDouble("Tick_Offset", "tickOffset", 16000.0);
+        this.propTimeMultiplier = new ConfigPropertyDouble("Time_Multiplier", "timeMultiplier", 1.0);
+        this.propSystemTimeSync = new ConfigPropertyBoolean("System_Time_Sync", "systemTimeSync", false);
+        this.propSystemTimeSyncInterval = new ConfigPropertyInteger(
+        		"System_Time_Sync_Interval_Seconds", "systemTimeSyncIntervalSeconds", 60);
 
         //this.propStartingYear = new ConfigPropertyInteger("Starting_Year", "startingYear", 1);
         //this.propClockDateOffset = new ConfigPropertyInteger("Clock_Date_Offset", "clockDateOffset", 0);
@@ -38,13 +49,16 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
         this.propAxialTilt = new ConfigPropertyDouble("Axial_Tilt", "axialTilt", 23.5);
         this.propPrecession = new ConfigPropertyDouble("Precession", "precession", 0.0);
 
-       	this.addConfigProperty(this.propDay);
-       	this.addConfigProperty(this.propYear);
-       	this.addConfigProperty(this.propYearOffset);
-       	this.addConfigProperty(this.propDayOffset);
-       	this.addConfigProperty(this.propTickOffset);
-       	this.addConfigProperty(this.propAxialTilt);
-       	this.addConfigProperty(this.propPrecession);
+		this.addConfigProperty(this.propDay);
+		this.addConfigProperty(this.propYear);
+		this.addConfigProperty(this.propYearOffset);
+		this.addConfigProperty(this.propDayOffset);
+		this.addConfigProperty(this.propTickOffset);
+		this.addConfigProperty(this.propTimeMultiplier);
+		this.addConfigProperty(this.propSystemTimeSync);
+		this.addConfigProperty(this.propSystemTimeSyncInterval);
+		this.addConfigProperty(this.propAxialTilt);
+		this.addConfigProperty(this.propPrecession);
 	}
 
 	@Override
@@ -74,6 +88,20 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
        	propTickOffset.setComment("Tick offset on world starting time.");
        	propTickOffset.setRequiresWorldRestart(true);
        	propTickOffset.setLanguageKey("config.property.server.tickoffset");
+
+		propTimeMultiplier.setComment("Default B3M-style time scale for new dimensions. "
+				+ "2 makes a day twice as long, 0.5 twice as fast, 0 pauses, and negative values reverse time.");
+		propTimeMultiplier.setMinValue(-20);
+		propTimeMultiplier.setMaxValue(72);
+		propTimeMultiplier.setRequiresWorldRestart(false);
+
+		propSystemTimeSync.setComment("Synchronize daylight and seasonal time with the server system clock.");
+		propSystemTimeSync.setRequiresWorldRestart(false);
+
+		propSystemTimeSyncInterval.setComment("Seconds between wall-clock corrections in system-time mode.");
+		propSystemTimeSyncInterval.setMinValue(1);
+		propSystemTimeSyncInterval.setMaxValue(3600);
+		propSystemTimeSyncInterval.setRequiresWorldRestart(false);
 
         propAxialTilt.setComment("Axial tilt in degrees. Always 0.0 when Server_Enabled is false.");
         propAxialTilt.setRequiresWorldRestart(true);
@@ -107,6 +135,9 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
        	this.yearOffset = propYearOffset.getInt();
        	this.dayOffset = propDayOffset.getInt();
        	this.tickOffset = propTickOffset.getDouble();
+		this.timeMultiplier = propTimeMultiplier.getDouble();
+		this.systemTimeSync = propSystemTimeSync.getBoolean();
+		this.systemTimeSyncIntervalSeconds = propSystemTimeSyncInterval.getInt();
 	}
 
 	
@@ -118,6 +149,9 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
        	this.yearOffset = propYearOffset.getInt();
        	this.dayOffset = propDayOffset.getInt();
        	this.tickOffset = propTickOffset.getDouble();
+		this.timeMultiplier = propTimeMultiplier.getDouble();
+		this.systemTimeSync = propSystemTimeSync.getBoolean();
+		this.systemTimeSyncIntervalSeconds = propSystemTimeSyncInterval.getInt();
 	}
 
 	@Override
@@ -128,6 +162,9 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
 		settings.yearOffset = this.yearOffset;
 		settings.dayOffset = this.dayOffset;
 		settings.tickOffset = this.tickOffset;
+		settings.timeMultiplier = this.timeMultiplier;
+		settings.systemTimeSync = this.systemTimeSync;
+		settings.systemTimeSyncIntervalSeconds = this.systemTimeSyncIntervalSeconds;
 		this.applyCopy(settings);
 		return settings;
 	}

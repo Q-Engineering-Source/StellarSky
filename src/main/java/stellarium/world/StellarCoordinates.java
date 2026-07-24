@@ -8,6 +8,8 @@ import stellarapi.api.view.ICCoordinates;
 import stellarium.common.ServerSettings;
 
 public class StellarCoordinates implements ICCoordinates {
+	// Greenwich mean sidereal angle at J2000.0 (2000-01-01 12:00 UT).
+	private static final double J2000_GMST = Math.toRadians(280.46061837);
 
 	//Rotation
 	private double rot;
@@ -19,25 +21,24 @@ public class StellarCoordinates implements ICCoordinates {
 	private double latitude, longitude;
 
 	private double axialTilt, precession;
+	private int systemTimeOffsetMinutes;
 
 	private double zeroTime;
 
 	private CelestialPeriod dayPeriod;
+	private boolean systemTimeModel;
 
 	public StellarCoordinates(ServerSettings commonSettings, PerDimensionSettings settings) {
-		this.yearLength = commonSettings.year;
-		this.dayLength = commonSettings.day;
+		this(commonSettings, settings, false);
+	}
+
+	public StellarCoordinates(ServerSettings commonSettings, PerDimensionSettings settings, boolean systemTimeModel) {
+		this.systemTimeModel = systemTimeModel;
 		this.latitude = Math.toRadians(settings.latitude);
 		this.longitude = Math.toRadians(settings.longitude);
-		this.rot = 2 * Math.PI * (this.yearLength + 1);
 		this.axialTilt = Math.toRadians(commonSettings.propAxialTilt.getDouble());
 		this.precession = Math.toRadians(commonSettings.propPrecession.getDouble());
-
-		this.zeroTime = (commonSettings.yearOffset * commonSettings.year + commonSettings.dayOffset) * commonSettings.day + commonSettings.tickOffset;
-
-		double fixedDaylength = this.dayLength * this.yearLength / (this.yearLength + 1);
-		this.dayPeriod = new CelestialPeriod("Celestial Day", fixedDaylength,
-				(this.zeroTime / fixedDaylength - this.longitude / 2 / Math.PI - 0.25)%1.0);
+		configureTimeModel(commonSettings);
 
 		/*double fixedYearLength = this.dayLength * this.yearLength;
 		this.yearPeriod = new CelestialPeriod("Year", fixedYearLength,
@@ -49,15 +50,79 @@ public class StellarCoordinates implements ICCoordinates {
 		HortoREq.setAsRotation(1.0, 0.0, 0.0, this.latitude - Math.PI / 2);
 	}
 
+	public void setSystemTimeModel(ServerSettings settings, boolean enabled) {
+		if(this.systemTimeModel == enabled)
+			return;
+		this.systemTimeModel = enabled;
+		configureTimeModel(settings);
+	}
+
+	public void setSystemTimeModel(ServerSettings settings, boolean enabled, int offsetMinutes) {
+		if(this.systemTimeModel == enabled && this.systemTimeOffsetMinutes == offsetMinutes)
+			return;
+		this.systemTimeModel = enabled;
+		this.systemTimeOffsetMinutes = offsetMinutes;
+		configureTimeModel(settings);
+	}
+
+	public boolean isSystemTimeModel() {
+		return this.systemTimeModel;
+	}
+
+	public CelestialPeriod getCivilDayPeriod() {
+		return new CelestialPeriod("Civil Day", 24000.0, 0.25);
+	}
+
+	private void configureTimeModel(ServerSettings settings) {
+		if(this.systemTimeModel) {
+			this.yearLength = stellarium.time.StellarSkyTime.REAL_TIME_YEAR_DAYS;
+			this.dayLength = 24000.0;
+		} else {
+			this.yearLength = settings.year;
+			this.dayLength = settings.day;
+		}
+		this.rot = 2 * Math.PI * (this.yearLength + 1);
+		double fixedDaylength = this.dayLength * this.yearLength / (this.yearLength + 1);
+		if(this.systemTimeModel) {
+			// The raw world clock is local civil time. Its J2000.0 value is
+			// 2000-01-01 12:00 UTC represented in the configured local zone.
+			this.zeroTime = -(30000.0 + this.systemTimeOffsetMinutes * (24000.0 / 1440.0));
+		} else {
+			this.zeroTime = (settings.yearOffset * settings.year + settings.dayOffset) * settings.day
+					+ settings.tickOffset;
+		}
+		this.dayPeriod = new CelestialPeriod("Celestial Day", fixedDaylength,
+				(this.zeroTime / fixedDaylength + (this.systemTimeModel ? J2000_GMST / (2.0 * Math.PI) : 0.0)
+						- this.longitude / (2.0 * Math.PI) - 0.25) % 1.0);
+	}
+
+	public void setLocationDegrees(double latitude, double longitude) {
+		this.latitude = Math.toRadians(Math.max(-90.0, Math.min(90.0, latitude)));
+		double normalizedLongitude = longitude % 360.0;
+		if(normalizedLongitude < 0.0)
+			normalizedLongitude += 360.0;
+		this.longitude = Math.toRadians(normalizedLongitude);
+		REqtoHor.setAsRotation(1.0, 0.0, 0.0, Math.PI / 2 - this.latitude);
+		HortoREq.setAsRotation(1.0, 0.0, 0.0, this.latitude - Math.PI / 2);
+		if(this.systemTimeModel) {
+			double fixedDaylength = this.dayLength * this.yearLength / (this.yearLength + 1);
+			this.zeroTime = -(30000.0 + this.systemTimeOffsetMinutes * (24000.0 / 1440.0));
+			this.dayPeriod = new CelestialPeriod("Celestial Day", fixedDaylength,
+					(this.zeroTime / fixedDaylength + J2000_GMST / (2.0 * Math.PI)
+							- this.longitude / (2.0 * Math.PI) - 0.25) % 1.0);
+		}
+	}
+
 	/*public CelestialPeriod getYearPeriod() {
 		return this.yearPeriod;
 	}*/
 
 	public void update(double year) {
+		double epochRotation = this.systemTimeModel ? J2000_GMST : 0.0;
 		ZTEctoNEc.setAsRotation(0.0, 0.0, 1.0, -this.precession*year);
 		NEctoZTEc.setAsRotation(0.0, 0.0, 1.0, this.precession*year);
-		NEqtoREq.setAsRotation(0.0, 0.0, 1.0, -this.rot*year - this.longitude);
-		REqtoNEq.setAsRotation(0.0, 0.0, 1.0, this.rot*year + this.longitude);
+		NEqtoREq.setAsRotation(0.0, 0.0, 1.0, -this.rot*year - epochRotation - this.longitude);
+		REqtoNEq.setAsRotation(0.0, 0.0, 1.0, this.rot*year + epochRotation + this.longitude);
 
 		Vector3 East = new Vector3(1.0, 0.0, 0.0);
 		invtransform(East);
@@ -156,7 +221,9 @@ public class StellarCoordinates implements ICCoordinates {
 		SpCoord coord = new SpCoord();
 		coord.setWithVec(eqrPos);
 
-		return (this.zeroTime / periodLength - this.longitude / 2.0 / Math.PI - coord.x / 360.0 - 0.25)%1.0;
+		return (this.zeroTime / periodLength
+				+ (this.systemTimeModel ? J2000_GMST / (2.0 * Math.PI) : 0.0)
+				- this.longitude / 2.0 / Math.PI - coord.x / 360.0 - 0.25)%1.0;
 	}
 
 	@Override

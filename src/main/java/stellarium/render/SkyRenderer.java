@@ -4,6 +4,7 @@ import org.lwjgl.opengl.GL11;
 
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderHelper;
+import stellarium.StellarSky;
 import stellarium.client.ClientSettings;
 import stellarium.display.DisplayRenderer;
 import stellarium.render.stellars.StellarRI;
@@ -37,19 +38,26 @@ public enum SkyRenderer {
 		GlStateManager.enableBlend();
 		GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
-		// Render display back
-		DisplayRenderer.INSTANCE.render(model.displayModel, false, info);
+		ClientSettings settings = StellarSky.PROXY.getClientSettings();
+		if(settings.renderDisplayOverlays && !settings.lowPowerRenderer) {
+			// Render display back
+			DisplayRenderer.INSTANCE.render(model.displayModel, false, info);
+		}
 
 		// Render stellars
 		StellarRenderer.INSTANCE.render(model.stellarModel, new StellarRI(info));
 
-		// Render display front
-		DisplayRenderer.INSTANCE.render(model.displayModel, true, info);
+		if(settings.renderDisplayOverlays && !settings.lowPowerRenderer) {
+			// Render display front
+			DisplayRenderer.INSTANCE.render(model.displayModel, true, info);
+		}
 
 		GlStateManager.enableFog();
 
-		// Render landscape
-		LandscapeRenderer.INSTANCE.render(model.landscapeModel, info);
+		if(settings.renderLandscape && !settings.lowPowerRenderer) {
+			// Render landscape
+			LandscapeRenderer.INSTANCE.render(model.landscapeModel, info);
+		}
 
 		GlStateManager.disableFog();
 		GlStateManager.enableDepth();

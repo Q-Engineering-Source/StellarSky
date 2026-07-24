@@ -1,5 +1,7 @@
 package stellarium.stellars;
 
+import java.util.HashMap;
+import java.util.Map;
 import javax.annotation.Nonnull;
 
 import net.minecraft.nbt.NBTTagCompound;
@@ -17,6 +19,7 @@ public final class StellarManager extends WorldSavedData {
 	private ServerSettings settings;
 	private CelestialManager celestialManager;
 	private boolean locked = false, setup = false;
+	private final Map<Integer, TimeState> timeStates = new HashMap<>();
 	
 	public StellarManager(String id) {
 		super(id);
@@ -73,11 +76,35 @@ public final class StellarManager extends WorldSavedData {
 		} else {
 			this.loadSettingsFromConfig();
 		}
+		this.timeStates.clear();
+		if(compound.hasKey("DimensionTimeStates", 10)) {
+			NBTTagCompound states = compound.getCompoundTag("DimensionTimeStates");
+			for(String key : states.getKeySet()) {
+				try {
+					int dimension = Integer.parseInt(key);
+					this.timeStates.put(dimension, TimeState.read(states.getCompoundTag(key),
+							defaultMultiplier(), defaultSystemTimeSync(), defaultSystemTimeSyncInterval()));
+				} catch(NumberFormatException ignored) {
+					// Ignore malformed third-party or old save data.
+				}
+			}
+		} else if(compound.hasKey("TimeMultiplier", 3)) {
+			// Migration path for the first global time-control implementation.
+			double multiplier = clampTimeMultiplier(compound.getInteger("TimeMultiplier"));
+			double saved = compound.hasKey("SavedTimeMultiplier", 3)
+					? clampTimeMultiplier(compound.getInteger("SavedTimeMultiplier")) : multiplier;
+			this.timeStates.put(0, new TimeState(multiplier, saved, defaultSystemTimeSync(),
+					defaultSystemTimeSyncInterval()));
+		}
 	}
 
 	@Override
 	public NBTTagCompound writeToNBT(NBTTagCompound compound) {
 		compound.setBoolean("locked", this.locked);
+		NBTTagCompound states = new NBTTagCompound();
+		for(Map.Entry<Integer, TimeState> entry : this.timeStates.entrySet())
+			states.setTag(Integer.toString(entry.getKey()), entry.getValue().write());
+		compound.setTag("DimensionTimeStates", states);
 		settings.writeToNBT(compound);
 		return compound;
 	}
@@ -117,6 +144,10 @@ public final class StellarManager extends WorldSavedData {
 	
 	public void update(double time){
 		double currentYear = this.getSkyYear(time);
+		this.updateSkyYear(currentYear);
+	}
+
+	public void updateSkyYear(double currentYear) {
 		celestialManager.update(currentYear);
 	}
 
@@ -127,6 +158,158 @@ public final class StellarManager extends WorldSavedData {
 
 	public boolean isLocked() {
 		return this.locked;
+	}
+
+	public double getTimeMultiplier(int dimension) {
+		return getTimeState(dimension).multiplier;
+	}
+
+	public void setTimeMultiplier(int dimension, double timeMultiplier) {
+		TimeState state = getTimeState(dimension);
+		state.multiplier = clampTimeMultiplier(timeMultiplier);
+		if(state.multiplier != 0)
+			state.savedMultiplier = state.multiplier;
+		this.markDirty();
+	}
+
+	public double getSavedTimeMultiplier(int dimension) {
+		return getTimeState(dimension).savedMultiplier;
+	}
+
+	public boolean isSystemTimeSyncEnabled(int dimension) {
+		return getTimeState(dimension).systemTimeSync;
+	}
+
+	public void setSystemTimeSyncEnabled(int dimension, boolean enabled) {
+		getTimeState(dimension).systemTimeSync = enabled;
+		this.markDirty();
+	}
+
+	public int getSystemTimeSyncIntervalSeconds(int dimension) {
+		return getTimeState(dimension).systemTimeSyncIntervalSeconds;
+	}
+
+	public void setSystemTimeSyncIntervalSeconds(int dimension, int seconds) {
+		getTimeState(dimension).systemTimeSyncIntervalSeconds = Math.max(1, Math.min(3600, seconds));
+		this.markDirty();
+	}
+
+	public void setLocation(int dimension, double latitude, double longitude) {
+		TimeState state = getTimeState(dimension);
+		state.hasLocationOverride = true;
+		state.latitude = Math.max(-90.0, Math.min(90.0, latitude));
+		state.longitude = normalizeLongitude(longitude);
+		this.markDirty();
+	}
+
+	public void clearLocationOverride(int dimension) {
+		getTimeState(dimension).hasLocationOverride = false;
+		this.markDirty();
+	}
+
+	public Map<Integer, TimeState> getTimeStates() {
+		return new HashMap<>(this.timeStates);
+	}
+
+	private TimeState getTimeState(int dimension) {
+		TimeState state = this.timeStates.get(dimension);
+		if(state == null) {
+			state = new TimeState(defaultMultiplier(), defaultMultiplier(), defaultSystemTimeSync(),
+					defaultSystemTimeSyncInterval());
+			this.timeStates.put(dimension, state);
+		}
+		return state;
+	}
+
+	private double defaultMultiplier() {
+		return this.settings == null ? 1 : clampTimeMultiplier(this.settings.timeMultiplier);
+	}
+
+	private boolean defaultSystemTimeSync() {
+		return this.settings != null && this.settings.systemTimeSync;
+	}
+
+	private int defaultSystemTimeSyncInterval() {
+		return this.settings == null ? 60
+				: Math.max(1, Math.min(3600, this.settings.systemTimeSyncIntervalSeconds));
+	}
+
+	private static double clampTimeMultiplier(double multiplier) {
+		return Math.max(-20, Math.min(72, multiplier));
+	}
+
+	private static double normalizeLongitude(double longitude) {
+		double normalized = longitude % 360.0;
+		return normalized < 0.0 ? normalized + 360.0 : normalized;
+	}
+
+	public static final class TimeState {
+		private double multiplier;
+		private double savedMultiplier;
+		private boolean systemTimeSync;
+		private int systemTimeSyncIntervalSeconds;
+		private boolean hasLocationOverride;
+		private double latitude;
+		private double longitude;
+
+		private TimeState(double multiplier, double savedMultiplier, boolean systemTimeSync,
+				int systemTimeSyncIntervalSeconds) {
+			this.multiplier = clampTimeMultiplier(multiplier);
+			this.savedMultiplier = savedMultiplier == 0 ? 1 : clampTimeMultiplier(savedMultiplier);
+			this.systemTimeSync = systemTimeSync;
+			this.systemTimeSyncIntervalSeconds = Math.max(1, Math.min(3600, systemTimeSyncIntervalSeconds));
+		}
+
+		private static TimeState read(NBTTagCompound tag, double defaultMultiplier, boolean defaultSystemTimeSync,
+				int defaultSystemTimeSyncInterval) {
+			TimeState state = new TimeState(tag.hasKey("Multiplier", 6) ? tag.getDouble("Multiplier")
+					: tag.hasKey("Multiplier", 3) ? tag.getInteger("Multiplier") : defaultMultiplier,
+					tag.hasKey("SavedMultiplier", 6) ? tag.getDouble("SavedMultiplier")
+					: tag.hasKey("SavedMultiplier", 3) ? tag.getInteger("SavedMultiplier") : defaultMultiplier,
+					tag.hasKey("SystemTimeSync", 1) ? tag.getBoolean("SystemTimeSync") : defaultSystemTimeSync,
+					tag.hasKey("SystemTimeSyncInterval", 3) ? tag.getInteger("SystemTimeSyncInterval")
+							: defaultSystemTimeSyncInterval);
+			state.hasLocationOverride = tag.getBoolean("LocationOverride");
+			state.latitude = tag.getDouble("Latitude");
+			state.longitude = tag.getDouble("Longitude");
+			return state;
+		}
+
+		private NBTTagCompound write() {
+			NBTTagCompound tag = new NBTTagCompound();
+			tag.setDouble("Multiplier", this.multiplier);
+			tag.setDouble("SavedMultiplier", this.savedMultiplier);
+			tag.setBoolean("SystemTimeSync", this.systemTimeSync);
+			tag.setInteger("SystemTimeSyncInterval", this.systemTimeSyncIntervalSeconds);
+			tag.setBoolean("LocationOverride", this.hasLocationOverride);
+			tag.setDouble("Latitude", this.latitude);
+			tag.setDouble("Longitude", this.longitude);
+			return tag;
+		}
+
+		public double getMultiplier() {
+			return this.multiplier;
+		}
+
+		public boolean isSystemTimeSync() {
+			return this.systemTimeSync;
+		}
+
+		public int getSystemTimeSyncIntervalSeconds() {
+			return this.systemTimeSyncIntervalSeconds;
+		}
+
+		public boolean hasLocationOverride() {
+			return this.hasLocationOverride;
+		}
+
+		public double getLatitude() {
+			return this.latitude;
+		}
+
+		public double getLongitude() {
+			return this.longitude;
+		}
 	}
 
 	public boolean hasSetup() {

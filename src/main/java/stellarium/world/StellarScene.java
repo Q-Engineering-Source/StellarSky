@@ -24,6 +24,7 @@ import stellarium.StellarSky;
 import stellarium.stellars.StellarManager;
 import stellarium.stellars.layer.StellarCollection;
 import stellarium.stellars.layer.StellarLayer;
+import stellarium.time.StellarSkyTime;
 
 public final class StellarScene implements ICelestialScene {
 	private final StellarManager manager;
@@ -33,6 +34,8 @@ public final class StellarScene implements ICelestialScene {
 	private PerDimensionSettings settings;
 	private IStellarSkySet skyset;
 	private StellarCoordinates coordinate;
+	private double configuredLatitude;
+	private double configuredLongitude;
 	private List<CelestialObject> foundSuns = Lists.newArrayList();
 	private List<CelestialObject> foundMoons = Lists.newArrayList();
 
@@ -51,6 +54,16 @@ public final class StellarScene implements ICelestialScene {
 
 	public PerDimensionSettings getSettings() {
 		return this.settings;
+	}
+
+	public void setDynamicLocation(double latitude, double longitude) {
+		if(this.coordinate != null)
+			this.coordinate.setLocationDegrees(latitude, longitude);
+	}
+
+	public void clearDynamicLocation() {
+		if(this.coordinate != null)
+			this.coordinate.setLocationDegrees(this.configuredLatitude, this.configuredLongitude);
 	}
 
 	private void loadSettingsFromConfig() {
@@ -99,7 +112,13 @@ public final class StellarScene implements ICelestialScene {
 	}
 
 	public void update(World world, long currentTick, long currentUniversalTick) {
-		coordinate.update(manager.getSkyYear(currentTick));
+		coordinate.setSystemTimeModel(manager.getSettings(), StellarSkyTime.isSystemTimeSyncEnabled(world),
+				StellarSkyTime.getSystemTimeOffsetMinutes(world));
+		double astronomicalYear = StellarSkyTime.getAstronomicalYear(world, currentTick);
+		// Celestial objects are shared by the pack, so the active world's
+		// update must happen immediately before its provider/render consumers.
+		manager.updateSkyYear(astronomicalYear);
+		coordinate.update(astronomicalYear);
 	}
 
 
@@ -113,8 +132,18 @@ public final class StellarScene implements ICelestialScene {
 		if(settings.allowRefraction())
 			this.skyset = new RefractiveSkySet(this.settings);
 		else this.skyset = new NonRefractiveSkySet(this.settings);
-		this.coordinate = new StellarCoordinates(manager.getSettings(), this.settings);
-		coordinate.update(manager.getSkyYear(0.0));
+		this.configuredLatitude = this.settings.latitude;
+		this.configuredLongitude = this.settings.longitude;
+		this.coordinate = new StellarCoordinates(manager.getSettings(), this.settings,
+				StellarSkyTime.isSystemTimeSyncEnabled(world));
+		StellarManager.TimeState timeState = manager.getTimeStates().get(world.provider.getDimension());
+		if(timeState != null && timeState.hasLocationOverride())
+			this.coordinate.setLocationDegrees(timeState.getLatitude(), timeState.getLongitude());
+		if(world.isRemote)
+			ObserverSkyState.applyClientContext(world, this.coordinate);
+		coordinate.setSystemTimeModel(manager.getSettings(), StellarSkyTime.isSystemTimeSyncEnabled(world),
+				StellarSkyTime.getSystemTimeOffsetMinutes(world));
+		coordinate.update(0.0);
 
 		StellarSky.INSTANCE.getLogger().info(String.format("Initialized Dimension Settings on Dimension %s.", dimName));
 
@@ -132,6 +161,10 @@ public final class StellarScene implements ICelestialScene {
 			foundSuns.addAll(type.getSuns(container));
 			foundMoons.addAll(type.getMoons(container));
 		}
+
+		double currentYear = StellarSkyTime.getAstronomicalYear(world, world.getWorldTime());
+		manager.updateSkyYear(currentYear);
+		coordinate.update(currentYear);
 
 		if(world.isRemote)
 			StellarSky.PROXY.setupDimensionLoad(this);
