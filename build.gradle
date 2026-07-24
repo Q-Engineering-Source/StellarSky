@@ -71,6 +71,13 @@ tasks.withType(JavaCompile).configureEach {
 jar {
     archiveClassifier = 'dev'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from('LICENSE') {
+        into 'META-INF'
+        rename { 'LICENSE_stellarsky' }
+    }
+    from('THIRD_PARTY_NOTICES.md') {
+        into 'META-INF'
+    }
     manifest {
         attributes(
                 'ModType': 'CRL',

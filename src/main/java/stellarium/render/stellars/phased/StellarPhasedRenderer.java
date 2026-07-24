@@ -5,6 +5,7 @@ import stellarium.render.stellars.layer.LayerRHelper;
 import stellarium.render.stellars.layer.StellarLayerModel;
 import stellarium.render.stellars.layer.StellarLayerRenderer;
 import stellarium.client.ClientSettings;
+import stellarium.render.extended.ExtendedSkyRenderer;
 import stellarium.stellars.star.brstar.LayerBrStar;
 import stellarium.stellars.system.LayerSolarSystem;
 import stellarium.stellars.milkyway.LayerMilkyway;
@@ -35,16 +36,23 @@ public enum StellarPhasedRenderer {
 		if(settings == null)
 			return true;
 		Object type = layerModel.getLayerType();
-		if(settings.lowPowerRenderer)
-			return type instanceof LayerSolarSystem || type instanceof LayerBrStar;
+		boolean extended = ExtendedSkyRenderer.INSTANCE.isActive(settings);
+		if(settings.lowPowerRenderer) {
+			if(type instanceof LayerSolarSystem)
+				return settings.renderSolarSystem;
+			return type instanceof LayerBrStar && !extended && settings.renderBrightStars;
+		}
 		if(type instanceof LayerSolarSystem)
 			return settings.renderSolarSystem;
 		if(type instanceof LayerBrStar)
-			return settings.renderBrightStars;
+			return !extended && settings.renderBrightStars;
 		if(type instanceof LayerMilkyway)
-			return settings.renderMilkyWay;
-		if(type instanceof LayerDeepSky)
+			return !extended && settings.renderMilkyWay;
+		if(type instanceof LayerDeepSky) {
+			if(extended)
+				return settings.renderDeepSky && settings.renderDeepSkyImages;
 			return settings.renderDeepSky;
+		}
 		return true;
 	}
 }

@@ -13,6 +13,10 @@ public class StellarSkyResources {
 	public static final PerWorldResource resourceMilkyway =
 			new PerWorldResource("Milkyway", new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "stellar/milkyway.png"));
 
+	public static final ResourceLocation resourceExtendedMilkyway =
+			new ResourceLocation(StellarSkyReferences.RESOURCE_ID,
+					"stellar/extended_milkyway.png");
+
 	public static final PerWorldResource resourceStar =
 			new PerWorldResource("Star", new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "stellar/star.png"));
 
@@ -98,6 +102,18 @@ public class StellarSkyResources {
 
 	public static final ResourceLocation fragmentPoint =
 			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "shaders/point.psh");
+
+	public static final ResourceLocation vertexExtendedStar =
+			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "shaders/extended_star.vsh");
+
+	public static final ResourceLocation fragmentExtendedStar =
+			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "shaders/extended_star.psh");
+
+	public static final ResourceLocation vertexExtendedDeepSky =
+			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "shaders/extended_deep_sky.vsh");
+
+	public static final ResourceLocation fragmentExtendedDeepSky =
+			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "shaders/extended_deep_sky.psh");
 
 	public static final ResourceLocation vertexTexured =
 			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "shaders/textured.vsh");

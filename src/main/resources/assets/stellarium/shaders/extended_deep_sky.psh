@@ -1,0 +1,13 @@
+#version 120
+#extension GL_ARB_point_sprite : enable
+
+varying vec3 objectColor;
+
+void main() {
+	vec2 point = gl_PointCoord * 2.0 - 1.0;
+	float radiusSquared = dot(point, point);
+	if (radiusSquared > 1.0)
+		discard;
+	float glow = pow(max(0.0, 1.0 - radiusSquared), 2.2);
+	gl_FragColor = vec4(objectColor * glow, 1.0);
+}

@@ -6,6 +6,7 @@ import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.shader.Framebuffer;
 import stellarium.StellarSky;
 import stellarium.client.ClientSettings;
+import stellarium.render.extended.ExtendedSkyRenderer;
 import stellarium.render.stellars.access.EnumStellarPass;
 import stellarium.render.stellars.atmosphere.AtmosphereRenderer;
 import stellarium.render.stellars.atmosphere.AtmosphereSettings;
@@ -31,6 +32,7 @@ public enum StellarRenderer {
 		if(!settings.lowPowerRenderer && settings.renderPostProcessing)
 			postProcessor.initialize();
 		shaders.reloadShaders();
+		ExtendedSkyRenderer.INSTANCE.initialize(settings);
 	}
 
 	public void preRender(ClientSettings settings, StellarRI info) {
@@ -57,6 +59,7 @@ public enum StellarRenderer {
 			GlStateManager.shadeModel(GL11.GL_SMOOTH);
 			GlStateManager.enableBlend();
 			GlStateManager.blendFunc(GL11.GL_ONE, GL11.GL_ONE);
+			ExtendedSkyRenderer.INSTANCE.render(settings, info);
 			StellarPhasedRenderer.INSTANCE.render(model.layersModel, EnumStellarPass.Source, layerInfo, true);
 
 			GlStateManager.enableDepth();
@@ -83,6 +86,7 @@ public enum StellarRenderer {
 			AtmosphereRenderer.INSTANCE.render(model.atmModel, EnumAtmospherePass.Prepare, info);
 
 		// Render surface
+		ExtendedSkyRenderer.INSTANCE.render(settings, info);
 		StellarPhasedRenderer.INSTANCE.render(model.layersModel, EnumStellarPass.Source, layerInfo);
 
 		// Setup opaque

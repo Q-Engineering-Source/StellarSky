@@ -1,0 +1,15 @@
+#version 120
+#extension GL_ARB_point_sprite : enable
+
+varying vec3 starColor;
+varying float starIntensity;
+
+void main() {
+	vec2 point = gl_PointCoord * 2.0 - 1.0;
+	float radiusSquared = dot(point, point);
+	if (radiusSquared > 1.0)
+		discard;
+	float core = smoothstep(1.0, 0.0, radiusSquared);
+	float halo = exp(-3.5 * radiusSquared);
+	gl_FragColor = vec4(starColor * starIntensity * (core + 0.32 * halo), 1.0);
+}

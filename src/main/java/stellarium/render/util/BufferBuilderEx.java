@@ -2,8 +2,6 @@ package stellarium.render.util;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.nio.ByteBuffer;
-
 import net.minecraft.client.renderer.BufferBuilder;
 import net.minecraft.client.renderer.vertex.VertexFormatElement;
 import net.minecraftforge.fml.relauncher.ReflectionHelper;
@@ -15,7 +13,6 @@ import stellarapi.api.lib.math.Vector3;
  * TODO AA Don't use MCP names, Let the utility translate it
  * */
 public class BufferBuilderEx extends BufferBuilder {
-	private ByteBuffer byteBuffer;
 	private static final MethodHandle vFormatIndex, nextVFI;
 
 	static {
@@ -34,8 +31,6 @@ public class BufferBuilderEx extends BufferBuilder {
 
 	public BufferBuilderEx(int bufferSizeIn) {
 		super(bufferSizeIn);
-		this.byteBuffer = ReflectionHelper.getPrivateValue(BufferBuilder.class,
-				this, "byteBuffer", "field_179001_a");		
 	}
 
 	public BufferBuilderEx pos(Vector3 pos) {
@@ -66,10 +61,12 @@ public class BufferBuilderEx extends BufferBuilder {
 				VertexFormatElement vertexFormatElement = this.getVertexFormat().getElement(vertexFormatIndex);
 
 				if(vertexFormatElement.getType() == VertexFormatElement.EnumType.FLOAT) {
-					this.byteBuffer.putFloat(i, red);
-					this.byteBuffer.putFloat(i + 4, green);
-					this.byteBuffer.putFloat(i + 8, blue);
-					this.byteBuffer.putFloat(i + 12, alpha);
+					// BufferBuilder replaces its ByteBuffer when it grows. Always fetch the
+					// current buffer instead of retaining the instance created at construction.
+					this.getByteBuffer().putFloat(i, red);
+					this.getByteBuffer().putFloat(i + 4, green);
+					this.getByteBuffer().putFloat(i + 8, blue);
+					this.getByteBuffer().putFloat(i + 12, alpha);
 					nextVFI.invokeExact((BufferBuilder)this);
 					return this;
 				} else {
