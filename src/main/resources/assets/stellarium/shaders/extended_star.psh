@@ -3,6 +3,7 @@
 
 varying vec3 starColor;
 varying float starIntensity;
+uniform sampler2D starHalo;
 
 void main() {
 	vec2 point = gl_PointCoord * 2.0 - 1.0;
@@ -11,5 +12,8 @@ void main() {
 		discard;
 	float core = smoothstep(1.0, 0.0, radiusSquared);
 	float halo = exp(-3.5 * radiusSquared);
-	gl_FragColor = vec4(starColor * starIntensity * (core + 0.32 * halo), 1.0);
+	vec4 textureHalo = texture2D(starHalo, gl_PointCoord);
+	float textureProfile = dot(textureHalo.rgb, vec3(0.3333));
+	float profile = textureProfile + 0.35 * (core + 0.32 * halo);
+	gl_FragColor = vec4(starColor * starIntensity * profile, profile);
 }

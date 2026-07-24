@@ -17,6 +17,9 @@ public class StellarSkyResources {
 			new ResourceLocation(StellarSkyReferences.RESOURCE_ID,
 					"stellar/extended_milkyway.png");
 
+	public static final ResourceLocation resourceExtendedStarHalo =
+			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "stellar/halo.png");
+
 	public static final PerWorldResource resourceStar =
 			new PerWorldResource("Star", new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "stellar/star.png"));
 

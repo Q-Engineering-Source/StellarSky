@@ -77,4 +77,22 @@ public class BufferBuilderEx extends BufferBuilder {
 			}
 		}
 	}
+
+	public BufferBuilderEx generic(float x, float y, float z) {
+		try {
+			int vertexFormatIndex = (int) vFormatIndex.invokeExact((BufferBuilder)this);
+			int i = this.getVertexCount() * this.getVertexFormat().getSize()
+					+ this.getVertexFormat().getOffset(vertexFormatIndex);
+			VertexFormatElement element = this.getVertexFormat().getElement(vertexFormatIndex);
+			if(element.getType() != VertexFormatElement.EnumType.FLOAT || element.getElementCount() != 3)
+				throw new IllegalStateException("Generic vertex element must be FLOAT3");
+			this.getByteBuffer().putFloat(i, x);
+			this.getByteBuffer().putFloat(i + 4, y);
+			this.getByteBuffer().putFloat(i + 8, z);
+			nextVFI.invokeExact((BufferBuilder)this);
+			return this;
+		} catch(Throwable e) {
+			throw new RuntimeException(e);
+		}
+	}
 }

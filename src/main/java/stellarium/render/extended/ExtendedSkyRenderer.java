@@ -15,6 +15,7 @@ import stellarium.client.SkyRendererMode;
 import stellarium.render.shader.IShaderObject;
 import stellarium.render.shader.ShaderHelper;
 import stellarium.render.stellars.StellarRI;
+import stellarium.time.StellarSkyTime;
 
 public enum ExtendedSkyRenderer {
 	INSTANCE;
@@ -25,7 +26,7 @@ public enum ExtendedSkyRenderer {
 			.setAsRotation(1.0, 0.0, 0.0, -0.4090926);
 
 	private ExtendedCatalogueLoader.CatalogueBuffer stars;
-	private ExtendedCatalogueLoader.CatalogueBuffer deepSky;
+	private ExtendedCatalogueLoader.DeepSkyCatalogue deepSky;
 	private ExtendedCatalogueLoader.CatalogueBuffer milkyWay;
 	private IShaderObject starShader;
 	private IShaderObject deepSkyShader;
@@ -109,31 +110,56 @@ public enum ExtendedSkyRenderer {
 				GL11.GL_LINEAR);
 		GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER,
 				GL11.GL_LINEAR);
+		GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S,
+				GL11.GL_REPEAT);
+		GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T,
+				GL11.GL_CLAMP);
 		float brightness = 0.16f * settings.extendedMilkyWayBrightness;
 		GlStateManager.color(brightness, brightness, brightness, 1.0f);
 		milkyWay.buffer.drawArrays();
 	}
 
 	private void renderDeepSky(StellarRI info) {
-		preparePointSprites();
+		GlStateManager.enableTexture2D();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE,
+				GL11.GL_ONE, GL11.GL_ONE);
 		deepSkyShader.bindShader();
-		double verticalFov = Math.toDegrees(2.0 * Math.atan(info.relativeHeight * 0.5));
-		deepSkyShader.getField("pixelsPerDegree")
-				.setDouble(info.minecraft.displayHeight / Math.max(1.0, verticalFov));
-		deepSky.buffer.drawArrays();
+		for(ExtendedCatalogueLoader.DeepSkyBatch batch : deepSky.batches) {
+			if(batch.texture != null) {
+				net.minecraft.client.Minecraft.getMinecraft().getTextureManager()
+						.bindTexture(batch.texture);
+				deepSkyShader.getField("useTexture").setInteger(1);
+			} else {
+				GlStateManager.bindTexture(0);
+				deepSkyShader.getField("useTexture").setInteger(0);
+			}
+			batch.buffer.drawArrays();
+		}
 		deepSkyShader.releaseShader();
-		finishPointSprites();
+		GlStateManager.disableBlend();
+		GlStateManager.enableTexture2D();
 	}
 
 	private void renderStars(ClientSettings settings, StellarRI info) {
 		preparePointSprites();
+		GlStateManager.enableTexture2D();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE,
+				GL11.GL_ONE, GL11.GL_ONE);
+		net.minecraft.client.Minecraft.getMinecraft().getTextureManager()
+				.bindTexture(StellarSkyResources.resourceExtendedStarHalo);
 		starShader.bindShader();
 		starShader.getField("brightnessScale").setDouble(settings.extendedStarBrightness);
 		starShader.getField("pixelScale").setDouble(
 				Math.max(0.75, info.minecraft.displayHeight / 1080.0));
+		double epochYears = StellarSkyTime.getAstronomicalYear(info.world,
+				info.world.getWorldTime()) - 2016.0;
+		starShader.getField("epochYears").setDouble(epochYears);
 		stars.buffer.drawArrays();
 		starShader.releaseShader();
 		finishPointSprites();
+		GlStateManager.disableBlend();
 	}
 
 	private static void preparePointSprites() {
@@ -161,6 +187,11 @@ public enum ExtendedSkyRenderer {
 	}
 
 	private static void delete(ExtendedCatalogueLoader.CatalogueBuffer buffer) {
+		if(buffer != null)
+			buffer.delete();
+	}
+
+	private static void delete(ExtendedCatalogueLoader.DeepSkyCatalogue buffer) {
 		if(buffer != null)
 			buffer.delete();
 	}

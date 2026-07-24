@@ -7,14 +7,21 @@ import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import org.apache.commons.io.IOUtils;
 import org.lwjgl.opengl.GL11;
 
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.ResourceLocation;
 import stellarapi.api.lib.math.SpCoord;
 import stellarapi.api.lib.math.Vector3;
 import stellarium.StellarSky;
+import stellarium.StellarSkyReferences;
 import stellarium.render.util.BufferBuilderEx;
 import stellarium.render.util.FloatVertexFormats;
 import stellarium.render.util.VertexBufferEx;
@@ -27,6 +34,7 @@ final class ExtendedCatalogueLoader {
 	private static final int HEADER_BYTES = 28;
 	private static final int STAR_BYTES = 48;
 	private static final double POSITION_SCALE = 2.0e9;
+	private static final double MAS_TO_RAD = Math.PI / (180.0 * 3600000.0);
 	private static final double RENDER_DEPTH = 100.0;
 
 	private static final String[] STAR_CATALOGUES = {
@@ -42,7 +50,7 @@ final class ExtendedCatalogueLoader {
 	static CatalogueBuffer loadStars(float magnitudeLimit) throws IOException {
 		BufferBuilderEx builder = VertexReferences.getBuilder();
 		try {
-			builder.begin(GL11.GL_POINTS, FloatVertexFormats.POSITION_COLOR_F);
+			builder.begin(GL11.GL_POINTS, FloatVertexFormats.POSITION_COLOR_MOTION_F);
 			int count = 0;
 
 			for(String path : STAR_CATALOGUES)
@@ -104,10 +112,15 @@ final class ExtendedCatalogueLoader {
 			float bv = data.getShort(offset + 32) / 1000.0f;
 			StarColor color = StarColor.getColor(bv);
 			float brightness = starDisplayBrightness(magnitude);
+			double motionX = data.getInt(offset + 20) / 1000.0 * MAS_TO_RAD;
+			double motionY = data.getInt(offset + 24) / 1000.0 * MAS_TO_RAD;
+			double motionZ = data.getInt(offset + 28) / 1000.0 * MAS_TO_RAD;
 			builder.pos(x / length * RENDER_DEPTH, y / length * RENDER_DEPTH,
-					z / length * RENDER_DEPTH)
-					.color(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, brightness)
-					.endVertex();
+					z / length * RENDER_DEPTH);
+			builder.color(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, brightness);
+			builder.generic((float) (motionX * RENDER_DEPTH),
+					(float) (motionY * RENDER_DEPTH), (float) (motionZ * RENDER_DEPTH));
+			builder.endVertex();
 			accepted++;
 		}
 		return accepted;
@@ -120,15 +133,15 @@ final class ExtendedCatalogueLoader {
 		return (float) Math.min(4.0, flux);
 	}
 
-	static CatalogueBuffer loadDeepSky(float magnitudeLimit) throws IOException {
+	static DeepSkyCatalogue loadDeepSky(float magnitudeLimit) throws IOException {
 		InputStream input = ExtendedCatalogueLoader.class.getResourceAsStream(
 				"/assets/stellarium/catalog/dso_catalog.txt");
 		if(input == null)
 			throw new IOException("Missing extended deep-sky catalogue");
 
-		BufferBuilderEx builder = VertexReferences.getBuilder();
+		Map<String, BufferBuilderEx> builders = new LinkedHashMap<>();
+		Map<String, Integer> counts = new LinkedHashMap<>();
 		try {
-			builder.begin(GL11.GL_POINTS, FloatVertexFormats.POSITION_COLOR_F);
 			int count = 0;
 
 			try(BufferedReader reader = new BufferedReader(
@@ -156,16 +169,21 @@ final class ExtendedCatalogueLoader {
 						double dec = Double.parseDouble(fields[2].trim());
 						float majorArcMinutes = Float.parseFloat(fields[7].trim());
 						float minorArcMinutes = Float.parseFloat(fields[8].trim());
-						float angularSize = deepSkyAngularSize(type, majorArcMinutes);
+						int positionAngle = parseInt(fields, 9, 0);
 						float brightness = deepSkyDisplayBrightness(magnitude,
 								majorArcMinutes, minorArcMinutes);
 						float[] color = deepSkyColor(type);
-						Vector3 pos = new SpCoord(ra, dec).getVec();
-						builder.pos(pos.getX() * 99.5, pos.getY() * 99.5,
-								pos.getZ() * 99.5)
-								.color(color[0] * brightness, color[1] * brightness,
-										color[2] * brightness, angularSize)
-								.endVertex();
+						String texture = deepSkyTexture(fields, type);
+						BufferBuilderEx builder = builders.get(texture);
+						if(builder == null) {
+							builder = new BufferBuilderEx(1 << 20);
+							builder.begin(GL11.GL_QUADS, FloatVertexFormats.POSITION_TEX_COLOR_F);
+							builders.put(texture, builder);
+							counts.put(texture, 0);
+						}
+						appendDeepSkyBillboard(builder, ra, dec, positionAngle,
+								type, majorArcMinutes, minorArcMinutes, color, brightness);
+						counts.put(texture, counts.get(texture) + 1);
 						count++;
 					} catch(NumberFormatException ignored) {
 						// A malformed row does not disable the entire catalogue.
@@ -173,17 +191,121 @@ final class ExtendedCatalogueLoader {
 				}
 			}
 
-			builder.finishDrawing();
-			VertexBufferEx buffer = new VertexBufferEx();
-			buffer.upload(builder);
+			List<DeepSkyBatch> batches = new ArrayList<>();
+			for(Map.Entry<String, BufferBuilderEx> entry : builders.entrySet()) {
+				BufferBuilderEx builder = entry.getValue();
+				builder.finishDrawing();
+				VertexBufferEx buffer = new VertexBufferEx();
+				buffer.upload(builder);
+				batches.add(new DeepSkyBatch(buffer, counts.get(entry.getKey()),
+						textureLocation(entry.getKey())));
+			}
 			StellarSky.INSTANCE.getLogger().info(
 					"Loaded {} extended deep-sky objects through magnitude {}",
 					count, magnitudeLimit);
-			return new CatalogueBuffer(buffer, count);
+			return new DeepSkyCatalogue(batches, count);
 		} catch(IOException | RuntimeException exception) {
-			abortBuild(builder);
+			for(BufferBuilderEx builder : builders.values())
+				abortBuild(builder);
 			throw exception;
 		}
+	}
+
+	private static int parseInt(String[] fields, int index, int fallback) {
+		if(index >= fields.length)
+			return fallback;
+		try {
+			return Integer.parseInt(fields[index].trim());
+		} catch(NumberFormatException ignored) {
+			return fallback;
+		}
+	}
+
+	private static String deepSkyTexture(String[] fields, String type) {
+		// Stellarium's photographic DSO set is keyed by Messier number. Keep
+		// this small atlas-like set in separate batches so each object retains
+		// its real image without a draw call per object.
+		int messier = parseInt(fields, 18, 0);
+		switch(messier) {
+		case 8: return "m8";
+		case 13: return "m13";
+		case 20: return "m20";
+		case 31: return "m31";
+		case 33: return "m33";
+		case 45: return "pleiades";
+		case 81: return "m81";
+		default:
+			if(type.contains("HII") || type.contains("RN") || type.contains("EN"))
+				return "n7000";
+			return "";
+		}
+	}
+
+	private static ResourceLocation textureLocation(String texture) {
+		if(texture == null || texture.isEmpty())
+			return null;
+		return new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "dso/" + texture + ".png");
+	}
+
+	private static void appendDeepSkyBillboard(BufferBuilderEx builder, double raDegrees,
+			double decDegrees, int positionAngle, String type, float majorArcMinutes,
+			float minorArcMinutes, float[] color, float brightness) {
+		double ra = Math.toRadians(raDegrees);
+		double dec = Math.toRadians(decDegrees);
+		double cosRa = Math.cos(ra), sinRa = Math.sin(ra);
+		double cosDec = Math.cos(dec), sinDec = Math.sin(dec);
+		Vector3 center = new Vector3(cosDec * cosRa, cosDec * sinRa, sinDec);
+		Vector3 east = new Vector3(-sinRa, cosRa, 0.0);
+		Vector3 north = new Vector3(-sinDec * cosRa, -sinDec * sinRa, cosDec);
+
+		double major = angularRadiusRadians(majorArcMinutes, type, false);
+		double minor = angularRadiusRadians(minorArcMinutes, type, true);
+		double angle = Math.toRadians(positionAngle);
+		// Position angle is measured from north toward east in the
+		// Stellarium catalogue.
+		Vector3 majorAxis = new Vector3(north).scale(Math.cos(angle))
+				.add(new Vector3(east).scale(Math.sin(angle)));
+		Vector3 minorAxis = new Vector3(north).scale(-Math.sin(angle))
+				.add(new Vector3(east).scale(Math.cos(angle)));
+		majorAxis.scale(major * 100.0);
+		minorAxis.scale(minor * 100.0);
+		center.scale(100.0);
+
+		float[] texture = textureCoordinates(type);
+		addDeepSkyVertex(builder, center, majorAxis, minorAxis, -1.0, -1.0,
+				texture[0], texture[1], color, brightness);
+		addDeepSkyVertex(builder, center, majorAxis, minorAxis, 1.0, -1.0,
+				texture[2], texture[1], color, brightness);
+		addDeepSkyVertex(builder, center, majorAxis, minorAxis, 1.0, 1.0,
+				texture[2], texture[3], color, brightness);
+		addDeepSkyVertex(builder, center, majorAxis, minorAxis, -1.0, 1.0,
+				texture[0], texture[3], color, brightness);
+	}
+
+	private static float angularRadiusRadians(float arcMinutes, String type, boolean minor) {
+		double value = validAngularSize(arcMinutes) ? arcMinutes : 1.0;
+		if(minor && !validAngularSize(arcMinutes))
+			value = 1.0;
+		double maxDegrees = isCluster(type) ? 1.5 : 4.0;
+		// Stellarium stores the full major/minor diameter in arcminutes;
+		// billboard axes are radii.
+		return (float) Math.toRadians(Math.max(0.005, Math.min(maxDegrees, value / 120.0)));
+	}
+
+	private static float[] textureCoordinates(String type) {
+		return new float[] {0.0f, 0.0f, 1.0f, 1.0f};
+	}
+
+	private static void addDeepSkyVertex(BufferBuilderEx builder, Vector3 center,
+			Vector3 majorAxis, Vector3 minorAxis, double majorSign, double minorSign,
+			float u, float v, float[] color, float brightness) {
+		Vector3 position = new Vector3(center)
+				.add(new Vector3(majorAxis).scale(majorSign))
+				.add(new Vector3(minorAxis).scale(minorSign));
+		builder.pos(position).tex(u, v)
+				.color(color[0] * brightness, color[1] * brightness,
+						color[2] * brightness, brightness)
+				.endVertex();
 	}
 
 	private static boolean validMagnitude(float magnitude) {
@@ -237,8 +359,8 @@ final class ExtendedCatalogueLoader {
 	}
 
 	static CatalogueBuffer buildMilkyWay() {
-		final int longitudeSegments = 96;
-		final int latitudeSegments = 48;
+		final int longitudeSegments = 192;
+		final int latitudeSegments = 96;
 		BufferBuilderEx builder = VertexReferences.getBuilder();
 		try {
 			builder.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX);
@@ -300,6 +422,33 @@ final class ExtendedCatalogueLoader {
 
 		void delete() {
 			buffer.deleteGlBuffers();
+		}
+	}
+
+	static final class DeepSkyCatalogue {
+		final List<DeepSkyBatch> batches;
+		final int count;
+
+		DeepSkyCatalogue(List<DeepSkyBatch> batches, int count) {
+			this.batches = batches;
+			this.count = count;
+		}
+
+		void delete() {
+			for(DeepSkyBatch batch : batches)
+				batch.buffer.deleteGlBuffers();
+		}
+	}
+
+	static final class DeepSkyBatch {
+		final VertexBufferEx buffer;
+		final int count;
+		final ResourceLocation texture;
+
+		DeepSkyBatch(VertexBufferEx buffer, int count, ResourceLocation texture) {
+			this.buffer = buffer;
+			this.count = count;
+			this.texture = texture;
 		}
 	}
 }
