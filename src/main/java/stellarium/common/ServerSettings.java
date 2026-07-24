@@ -2,6 +2,8 @@ package stellarium.common;
 
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.common.config.Configuration;
+import net.minecraftforge.common.config.ConfigCategory;
+import net.minecraftforge.common.config.Property;
 import stellarapi.api.lib.config.INBTConfig;
 import stellarapi.api.lib.config.SimpleHierarchicalNBTConfig;
 import stellarapi.api.lib.config.property.ConfigProperty;
@@ -11,6 +13,8 @@ import stellarapi.api.lib.config.property.ConfigPropertyInteger;
 import stellarium.stellars.layer.StellarLayerRegistry;
 
 public class ServerSettings extends SimpleHierarchicalNBTConfig {
+	private static final String TIME_MULTIPLIER_KEY = "Time_Multiplier";
+
 	public double day, year;
 	public int yearOffset, dayOffset;
 	public double tickOffset;
@@ -38,7 +42,7 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
         this.propYearOffset = new ConfigPropertyInteger("Year_Offset", "yearOffset", 0);
         this.propDayOffset = new ConfigPropertyInteger("Day_Offset", "dayOffset", 0);
         this.propTickOffset = new ConfigPropertyDouble("Tick_Offset", "tickOffset", 16000.0);
-        this.propTimeMultiplier = new ConfigPropertyDouble("Time_Multiplier", "timeMultiplier", 1.0);
+        this.propTimeMultiplier = new ConfigPropertyDouble(TIME_MULTIPLIER_KEY, "timeMultiplier", 1.0);
         this.propSystemTimeSync = new ConfigPropertyBoolean("System_Time_Sync", "systemTimeSync", false);
         this.propSystemTimeSyncInterval = new ConfigPropertyInteger(
         		"System_Time_Sync_Interval_Seconds", "systemTimeSyncIntervalSeconds", 60);
@@ -66,6 +70,8 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
 		config.setCategoryComment(category, "Configurations for server modifications.");
 		config.setCategoryLanguageKey(category, "config.category.server");
 		config.setCategoryRequiresWorldRestart(category, true);
+
+		migrateTimeMultiplier(config, category);
 		
 		super.setupConfig(config, category);
         
@@ -110,6 +116,28 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
        	propPrecession.setComment("Precession in degrees per year.");
        	propPrecession.setRequiresWorldRestart(true);
        	propPrecession.setLanguageKey("config.property.server.precession");
+	}
+
+	static void migrateTimeMultiplier(Configuration config, String category) {
+		if(!config.hasKey(category, TIME_MULTIPLIER_KEY))
+			return;
+
+		ConfigCategory configCategory = config.getCategory(category);
+		Property oldProperty = configCategory.get(TIME_MULTIPLIER_KEY);
+		if(oldProperty == null || oldProperty.getType() == Property.Type.DOUBLE)
+			return;
+
+		double value = 1.0;
+		try {
+			double parsed = Double.parseDouble(oldProperty.getString());
+			if(!Double.isNaN(parsed) && !Double.isInfinite(parsed))
+				value = parsed;
+		} catch(NumberFormatException ignored) {
+		}
+
+		configCategory.remove(TIME_MULTIPLIER_KEY);
+		configCategory.put(TIME_MULTIPLIER_KEY,
+				new Property(TIME_MULTIPLIER_KEY, Double.toString(value), Property.Type.DOUBLE));
 	}
 
 	@Override

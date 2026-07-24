@@ -52,6 +52,12 @@ dependencies {
     compileOnly 'com.cleanroommc:lwjglx:1.0.0'
     modCompileOnly project(':stellarapi')
     modRuntimeOnly files('../StellarAPI/build/libs/stellarapi-1.12.2-0.5.2.2.jar')
+    testImplementation 'junit:junit:4.13.2'
+}
+
+sourceSets.test {
+    compileClasspath += sourceSets.main.compileClasspath
+    runtimeClasspath += sourceSets.main.runtimeClasspath
 }
 
 processResources {
