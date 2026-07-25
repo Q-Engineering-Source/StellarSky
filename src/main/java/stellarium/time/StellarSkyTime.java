@@ -11,7 +11,10 @@ import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 import net.minecraft.world.World;
+import stellarapi.api.CelestialPeriod;
+import stellarapi.api.PeriodHelper;
 import stellarium.stellars.StellarManager;
+import stellarium.world.StellarScene;
 
 /**
  * Keeps the daylight clock independent from the simulation tick rate.
@@ -88,8 +91,26 @@ public final class StellarSkyTime {
 		return StellarManager.getManager(world.getMinecraftServer().getEntityWorld()).getSkyYear(worldTime);
 	}
 
-	public static long getCivilTimeTicks(long worldTime) {
+	public static long getSystemCivilTimeTicks(long worldTime) {
 		return Math.floorMod(worldTime - 18000L, 24000L);
+	}
+
+	/**
+	 * @deprecated Use {@link #getCivilTimeTicks(World, long, float)} when a
+	 * local astronomical clock is required.
+	 */
+	@Deprecated
+	public static long getCivilTimeTicks(long worldTime) {
+		return getSystemCivilTimeTicks(worldTime);
+	}
+
+	/**
+	 * Converts the primary sun's local horizontal phase to a 24-hour civil
+	 * clock. Solar offset zero is local midnight and 0.5 is local noon.
+	 */
+	public static long getCivilTimeTicks(World world, long worldTime, float partialTicks) {
+		CelestialPeriod period = requireLocalSolarPeriod(world);
+		return Math.floorMod((long) Math.floor(period.getOffset(worldTime, partialTicks) * 24000.0), 24000L);
 	}
 
 	public static LocalDate getSystemCivilDate(long worldTime) {
@@ -160,10 +181,46 @@ public final class StellarSkyTime {
 		return Math.round(seconds * (24000.0 / 86400.0));
 	}
 
-	public static long withCivilTime(long worldTime, int hour, int minute, int second) {
-		long civilDay = Math.floorDiv(worldTime - 18000L, 24000L);
+	/**
+	 * Sets a local solar clock time while preserving the current local solar
+	 * day. The returned value is the raw world time consumed by both the
+	 * celestial renderer and Minecraft's provider APIs.
+	 */
+	public static long withCivilTime(World world, long worldTime, int hour, int minute, int second) {
 		long seconds = hour * 3600L + minute * 60L + second;
-		return civilDay * 24000L + 18000L + ticksForCivilSeconds(seconds);
+		return timeAtSolarOffset(requireLocalSolarPeriod(world), worldTime, seconds / 86400.0);
+	}
+
+	/**
+	 * Converts a civil duration expressed on a 24-hour clock to raw world
+	 * ticks using the configured solar-day length.
+	 */
+	public static long addCivilTime(World world, long worldTime, long civilTicks) {
+		CelestialPeriod period = requireLocalSolarPeriod(world);
+		return worldTime + Math.round(civilTicks * period.getPeriodLength() / 24000.0);
+	}
+
+	static long timeAtSolarOffset(CelestialPeriod period, long worldTime, double targetOffset) {
+		double periodLength = period.getPeriodLength();
+		if(!(periodLength > 0.0) || Double.isInfinite(periodLength))
+			throw new IllegalStateException("The local solar day has an invalid period length.");
+		double normalizedTarget = targetOffset - Math.floor(targetOffset);
+		double cycle = Math.floor(period.getZerotimeOffset() + worldTime / periodLength);
+		return Math.round((cycle + normalizedTarget - period.getZerotimeOffset()) * periodLength);
+	}
+
+	public static void refreshAstronomicalState(World world) {
+		StellarScene scene = StellarScene.getScene(world);
+		if(scene == null)
+			throw new IllegalStateException("StellarSky has no active celestial scene for this dimension.");
+		scene.update(world, world.getWorldTime(), world.getTotalWorldTime());
+	}
+
+	private static CelestialPeriod requireLocalSolarPeriod(World world) {
+		CelestialPeriod period = PeriodHelper.getDayPeriod(world);
+		if(period == null)
+			throw new IllegalStateException("StellarSky has no primary solar period for this dimension.");
+		return period;
 	}
 
 	public static void resetSystemTimeCorrection(World world) {

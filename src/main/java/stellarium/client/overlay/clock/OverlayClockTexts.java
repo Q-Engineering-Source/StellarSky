@@ -112,7 +112,8 @@ public class OverlayClockTexts {
 		long currentTick = Minecraft.getMinecraft().world.getWorldTime();
 		if(stellarium.time.StellarSkyTime.isSystemTimeSyncEnabled(Minecraft.getMinecraft().world)) {
 			java.time.LocalDate date = stellarium.time.StellarSkyTime.getSystemCivilDate(currentTick);
-			long civilTick = stellarium.time.StellarSkyTime.getCivilTimeTicks(currentTick);
+			long civilTick = stellarium.time.StellarSkyTime.getCivilTimeTicks(
+					Minecraft.getMinecraft().world, currentTick, partialTicks);
 			this.yr = date.getYear();
 			this.day = date.getDayOfYear();
 			this.yearToDay = stellarium.time.StellarSkyTime.REAL_TIME_YEAR_DAYS;

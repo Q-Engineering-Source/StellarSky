@@ -53,6 +53,7 @@ dependencies {
     modCompileOnly project(':stellarapi')
     modRuntimeOnly files('../StellarAPI/build/libs/stellarapi-1.12.2-0.5.2.2.jar')
     testImplementation 'junit:junit:4.13.2'
+    testRuntimeOnly project(':stellarapi')
 }
 
 sourceSets.test {
@@ -72,6 +73,10 @@ compileJava {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+tasks.named('test') {
+    dependsOn(':stellarapi:remapJar')
 }
 
 jar {

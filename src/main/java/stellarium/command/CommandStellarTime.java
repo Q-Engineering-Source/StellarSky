@@ -159,8 +159,7 @@ public final class CommandStellarTime extends CommandBase {
 			int[] clock = parseClock(args[index + 1]);
 			World targetWorld = requireWorld(server, dimension);
 			manager.setSystemTimeSyncEnabled(dimension, false);
-			targetWorld.setWorldTime(StellarSkyTime.withCivilTime(targetWorld.getWorldTime(),
-					clock[0], clock[1], clock[2]));
+			setCivilTime(targetWorld, clock[0], clock[1], clock[2]);
 			sync(server, dimension, manager);
 			send(sender, dimension, manager);
 			return;
@@ -169,7 +168,7 @@ public final class CommandStellarTime extends CommandBase {
 			requireArgCount(args, index, 2);
 			World targetWorld = requireWorld(server, dimension);
 			manager.setSystemTimeSyncEnabled(dimension, false);
-			targetWorld.setWorldTime(targetWorld.getWorldTime() + parseDurationTicks(args[index + 1]));
+			addCivilTime(targetWorld, parseDurationTicks(args[index + 1]));
 			sync(server, dimension, manager);
 			send(sender, dimension, manager);
 			return;
@@ -247,7 +246,13 @@ public final class CommandStellarTime extends CommandBase {
 			throw new CommandException("Dimension " + dimension + " is not loaded.");
 
 		long worldTime = world.getWorldTime();
-		long civilTicks = StellarSkyTime.getCivilTimeTicks(worldTime);
+		long civilTicks;
+		try {
+			StellarSkyTime.refreshAstronomicalState(world);
+			civilTicks = StellarSkyTime.getCivilTimeTicks(world, worldTime, 0.0f);
+		} catch(IllegalStateException exception) {
+			throw new CommandException(exception.getMessage());
+		}
 		long civilSeconds = Math.round(civilTicks * (86400.0 / 24000.0)) % 86400L;
 		String civilTime = String.format(Locale.ROOT, "%02d:%02d:%02d",
 				civilSeconds / 3600L, civilSeconds / 60L % 60L, civilSeconds % 60L);
@@ -363,6 +368,26 @@ public final class CommandStellarTime extends CommandBase {
 			seconds = parseDecimal(normalized) * factor;
 		}
 		return StellarSkyTime.ticksForCivilSeconds(seconds);
+	}
+
+	static void setCivilTime(World world, int hour, int minute, int second) throws CommandException {
+		try {
+			StellarSkyTime.refreshAstronomicalState(world);
+			world.setWorldTime(StellarSkyTime.withCivilTime(world, world.getWorldTime(), hour, minute, second));
+			StellarSkyTime.refreshAstronomicalState(world);
+		} catch(IllegalStateException exception) {
+			throw new CommandException(exception.getMessage());
+		}
+	}
+
+	static void addCivilTime(World world, long civilTicks) throws CommandException {
+		try {
+			StellarSkyTime.refreshAstronomicalState(world);
+			world.setWorldTime(StellarSkyTime.addCivilTime(world, world.getWorldTime(), civilTicks));
+			StellarSkyTime.refreshAstronomicalState(world);
+		} catch(IllegalStateException exception) {
+			throw new CommandException(exception.getMessage());
+		}
 	}
 
 	private static int parseBounded(String value, int min, int max, String name) throws CommandException {

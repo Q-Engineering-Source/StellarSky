@@ -63,7 +63,7 @@ public final class CommandAstronomicalTime extends CommandBase {
 			else
 				clock = CommandStellarTime.parseClock(value);
 			manager.setSystemTimeSyncEnabled(dimension, false);
-			world.setWorldTime(StellarSkyTime.withCivilTime(world.getWorldTime(), clock[0], clock[1], clock[2]));
+			CommandStellarTime.setCivilTime(world, clock[0], clock[1], clock[2]);
 			sync(server, dimension, manager);
 			sender.sendMessage(new TextComponentString(String.format(Locale.ROOT,
 					"Time in dimension %d set to %02d:%02d:%02d.", dimension, clock[0], clock[1], clock[2])));
@@ -72,13 +72,19 @@ public final class CommandAstronomicalTime extends CommandBase {
 		if("add".equals(action)) {
 			long ticks = CommandStellarTime.parseDurationTicks(value);
 			manager.setSystemTimeSyncEnabled(dimension, false);
-			world.setWorldTime(world.getWorldTime() + ticks);
+			CommandStellarTime.addCivilTime(world, ticks);
 			sync(server, dimension, manager);
 			sender.sendMessage(new TextComponentString("Added " + value + " to dimension " + dimension + "."));
 			return;
 		}
 		if("query".equals(action) && "daytime".equalsIgnoreCase(value)) {
-			long civilTicks = Math.floorMod(world.getWorldTime() - 18000L, 24000L);
+			long civilTicks;
+			try {
+				StellarSkyTime.refreshAstronomicalState(world);
+				civilTicks = StellarSkyTime.getCivilTimeTicks(world, world.getWorldTime(), 0.0f);
+			} catch(IllegalStateException exception) {
+				throw new CommandException(exception.getMessage());
+			}
 			int seconds = (int) Math.round(civilTicks * (86400.0 / 24000.0)) % 86400;
 			sender.setCommandStat(CommandResultStats.Type.QUERY_RESULT, seconds);
 			sender.sendMessage(new TextComponentString(String.format(Locale.ROOT, "Time in dimension %d is %02d:%02d:%02d.",
