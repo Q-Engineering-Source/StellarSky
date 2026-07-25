@@ -11,7 +11,7 @@ public class FloatVertexFormats {
 	public static final VertexFormat POSITION_TEX_COLOR_F_NORMAL = new VertexFormat();
 
 	public static final VertexFormatElement COLOR_4F = new VertexFormatElement(0, VertexFormatElement.EnumType.FLOAT, VertexFormatElement.EnumUsage.COLOR, 4);
-	public static final VertexFormatElement MOTION_3F = new VertexFormatElement(1,
+	public static final VertexFormatElement MOTION_3F = new VertexFormatElement(0,
 			VertexFormatElement.EnumType.FLOAT, VertexFormatElement.EnumUsage.UV, 3);
 
 	static {

@@ -8,7 +8,7 @@ uniform float pixelScale;
 uniform float epochYears;
 
 void main() {
-	vec3 propagatedPosition = gl_Vertex.xyz + gl_MultiTexCoord1.xyz * epochYears;
+	vec3 propagatedPosition = gl_Vertex.xyz + gl_MultiTexCoord0.xyz * epochYears;
 	gl_Position = gl_ModelViewProjectionMatrix * vec4(propagatedPosition, 1.0);
 	starColor = gl_Color.rgb;
 	starIntensity = clamp(gl_Color.a * brightnessScale, 0.0, 4.0);
