@@ -5244,7 +5244,7 @@
 	},
 	{
 		"imageCredits" : {"short" : "Harel Boren","infoUrl": "http://www.pbase.com/boren/image/151851961/original"},
-		"imageUrl" : "etaCarinae.png",
+		"imageUrl" : "etacarinae.png",
 		"worldCoords" : [[[163.98,-61.3168], [157.8101,-61.2812], [158.143,-58.3275], [163.7832,-58.3588]]],
 		"textureCoords" : [[[0,0], [1,0], [1,1], [0,1]]],
 		"minResolution" : 0.266023154,
@@ -5260,7 +5260,7 @@
 	},
 	{
 		"imageCredits" : {"Short":"Plover Hill Observatory","infoUrl": "http://www.madpc.co.uk/~peterv/"},
-		"imageUrl" : "GammaCygni-vasey.png",
+		"imageUrl" : "gammacygni-vasey.png",
 		"worldCoords" : [[[307.4900, 38.3650], [303.1000, 38.5280], [303.2100, 41.9600], [307.8150, 41.7900]]],
 		"textureCoords" : [[[0,0], [1,0], [1,1], [0,1]]],
 		"minResolution" : 0.2169148018,
@@ -5268,7 +5268,7 @@
 	},
 	{
 		"imageCredits" : {"Short":"Plover Hill Observatory","infoUrl": "http://www.madpc.co.uk/~peterv/"},
-		"imageUrl" : "Jones-Emberson1-vasey.png",
+		"imageUrl" : "jones-emberson1-vasey.png",
 		"worldCoords" : [[[119.7535, 53.2732], [119.2035, 53.2580], [119.1770, 53.5870], [119.7305, 53.6015]]],
 		"textureCoords" : [[[0,0], [1,0], [1,1], [0,1]]],
 		"minResolution" : 0.2169148018,
@@ -5276,7 +5276,7 @@
 	},
 	{
 		"imageCredits" : {"Short":"Plover Hill Observatory","infoUrl": "http://www.madpc.co.uk/~peterv/"},
-		"imageUrl" : "Medusa-vasey.png",
+		"imageUrl" : "medusa-vasey.png",
 		"worldCoords" : [[[112.4025, 13.0949], [112.0710, 13.1070], [112.0834, 13.4296], [112.4150, 13.4175]]],
 		"textureCoords" : [[[0,0], [1,0], [1,1], [0,1]]],
 		"minResolution" : 0.2169148018,
