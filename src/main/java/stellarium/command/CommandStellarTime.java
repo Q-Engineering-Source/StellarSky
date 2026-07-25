@@ -13,6 +13,14 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.world.World;
+import stellarapi.api.CelestialPeriod;
+import stellarapi.api.PeriodHelper;
+import stellarapi.api.SAPIReferences;
+import stellarapi.api.celestials.CelestialEffectors;
+import stellarapi.api.celestials.IEffectorType;
+import stellarapi.api.lib.math.SpCoord;
+import stellarapi.api.lib.math.Vector3;
+import stellarapi.api.view.ICCoordinates;
 import stellarium.StellarSky;
 import stellarium.api.observer.ObserverSkyContext;
 import stellarium.api.observer.ObserverSkyResolvers;
@@ -307,6 +315,37 @@ public final class CommandStellarTime extends CommandBase {
 					format(observer.getLatitude()), format(observer.getLongitude()),
 					format(observer.getAltitude()))));
 		}
+
+		sendSolarDiagnostics(sender, world, worldTime, longitude);
+	}
+
+	private static void sendSolarDiagnostics(ICommandSender sender, World world,
+			long worldTime, double longitude) {
+		CelestialPeriod period = PeriodHelper.getDayPeriod(world);
+		ICCoordinates coordinate = SAPIReferences.getCoordinates(world);
+		CelestialEffectors lights = SAPIReferences.getEffectors(world, IEffectorType.Light);
+		if(period == null || coordinate == null || lights == null)
+			return;
+
+		Vector3 horizontal = coordinate.getProjectionToGround().transform(
+				new Vector3(lights.getPrimarySource().getCurrentPos()));
+		SpCoord sun = new SpCoord().setWithVec(horizontal);
+		double providerAngle = world.provider.calculateCelestialAngle(worldTime, 0.0f);
+		double phase = period.getOffset(worldTime, 0.0f);
+		sender.sendMessage(new TextComponentString(String.format(Locale.ROOT,
+				"Sun: altitude %.3f deg, azimuth %.3f deg, solar phase %.6f, provider angle %.6f.",
+				sun.y, sun.x, phase, providerAngle)));
+		sender.sendMessage(new TextComponentString(String.format(Locale.ROOT,
+				"Solar period: %.3f ticks, zero phase %.6f.",
+				period.getPeriodLength(), period.getZerotimeOffset())));
+
+		int zoneOffsetMinutes = StellarSkyTime.getSystemTimeOffsetMinutes(world);
+		double zoneMeridian = zoneOffsetMinutes / 4.0;
+		double longitudeDifference = longitude - zoneMeridian;
+		longitudeDifference -= Math.floor((longitudeDifference + 180.0) / 360.0) * 360.0;
+		sender.sendMessage(new TextComponentString(String.format(Locale.ROOT,
+				"Timezone: UTC%+.2f, zone meridian %.3f deg, longitude solar correction %+.2f min (equation of time excluded).",
+				zoneOffsetMinutes / 60.0, zoneMeridian, longitudeDifference * 4.0)));
 	}
 
 	private static double parseMultiplier(String value) throws CommandException {

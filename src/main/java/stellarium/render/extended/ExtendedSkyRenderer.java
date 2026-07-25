@@ -32,6 +32,7 @@ public enum ExtendedSkyRenderer {
 	private IShaderObject starShader;
 	private IShaderObject deepSkyShader;
 	private IShaderObject deepSkyImageShader;
+	private IShaderObject milkyWayShader;
 	private float loadedStarLimit = Float.NaN;
 	private float loadedDeepSkyLimit = Float.NaN;
 	private boolean ready;
@@ -52,9 +53,14 @@ public enum ExtendedSkyRenderer {
 						"extended_deep_sky_images",
 						StellarSkyResources.vertexExtendedDeepSkyImage,
 						StellarSkyResources.fragmentExtendedDeepSkyImage);
+				this.milkyWayShader = ShaderHelper.getInstance().buildShader(
+						"extended_milky_way",
+						StellarSkyResources.vertexExtendedDeepSkyImage,
+						StellarSkyResources.fragmentExtendedMilkyWay);
 			}
 			if(starShader == null || (!settings.lowPowerRenderer
-					&& (deepSkyShader == null || deepSkyImageShader == null)))
+					&& (deepSkyShader == null || deepSkyImageShader == null
+							|| milkyWayShader == null)))
 				throw new IOException("Extended sky shader compilation failed");
 
 			if(stars == null || loadedStarLimit != settings.extendedStarMagnitudeLimit) {
@@ -134,7 +140,11 @@ public enum ExtendedSkyRenderer {
 				GL11.GL_CLAMP);
 		float brightness = 0.16f * settings.extendedMilkyWayBrightness;
 		GlStateManager.color(brightness, brightness, brightness, 1.0f);
+		milkyWayShader.bindShader();
+		milkyWayShader.getField("skyImage").setInteger(0);
+		milkyWayShader.getField("texelSize").setDouble2(1.0 / 2048.0, 1.0 / 1024.0);
 		milkyWay.buffer.drawArrays();
+		milkyWayShader.releaseShader();
 	}
 
 	private void renderDeepSky(StellarRI info) {

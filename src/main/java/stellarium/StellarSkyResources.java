@@ -126,6 +126,10 @@ public class StellarSkyResources {
 			new ResourceLocation(StellarSkyReferences.RESOURCE_ID,
 					"shaders/extended_deep_sky_image.psh");
 
+	public static final ResourceLocation fragmentExtendedMilkyWay =
+			new ResourceLocation(StellarSkyReferences.RESOURCE_ID,
+					"shaders/extended_milkyway.psh");
+
 	public static final ResourceLocation vertexTexured =
 			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "shaders/textured.vsh");
 

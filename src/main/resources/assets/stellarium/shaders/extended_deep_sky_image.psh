@@ -4,7 +4,17 @@ varying vec2 imageTexCoord;
 varying vec4 imageColor;
 uniform sampler2D skyImage;
 
+vec3 srgbToLinear(vec3 color) {
+	vec3 low = color / 12.92;
+	vec3 high = pow((color + 0.055) / 1.055, vec3(2.4));
+	return mix(low, high, step(vec3(0.04045), color));
+}
+
 void main() {
 	vec4 image = texture2D(skyImage, imageTexCoord);
-	gl_FragColor = vec4(image.rgb * imageColor.rgb, imageColor.a);
+	float edgeDistance = min(min(imageTexCoord.x, imageTexCoord.y),
+			min(1.0 - imageTexCoord.x, 1.0 - imageTexCoord.y));
+	float edgeFade = smoothstep(0.0, 0.035, edgeDistance);
+	vec3 signal = srgbToLinear(max(image.rgb - vec3(1.0 / 1024.0), vec3(0.0)));
+	gl_FragColor = vec4(signal * imageColor.rgb * edgeFade, imageColor.a);
 }

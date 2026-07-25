@@ -1,0 +1,23 @@
+#version 120
+
+varying vec2 imageTexCoord;
+varying vec4 imageColor;
+uniform sampler2D skyImage;
+uniform vec2 texelSize;
+
+vec3 srgbToLinear(vec3 color) {
+	vec3 low = color / 12.92;
+	vec3 high = pow((color + 0.055) / 1.055, vec3(2.4));
+	return mix(low, high, step(vec3(0.04045), color));
+}
+
+void main() {
+	vec3 center = texture2D(skyImage, imageTexCoord).rgb;
+	vec3 neighbors =
+			texture2D(skyImage, imageTexCoord + vec2(texelSize.x, 0.0)).rgb
+			+ texture2D(skyImage, imageTexCoord - vec2(texelSize.x, 0.0)).rgb
+			+ texture2D(skyImage, imageTexCoord + vec2(0.0, texelSize.y)).rgb
+			+ texture2D(skyImage, imageTexCoord - vec2(0.0, texelSize.y)).rgb;
+	vec3 sharpened = mix(center, clamp(center * 5.0 - neighbors, 0.0, 1.0), 0.28);
+	gl_FragColor = vec4(srgbToLinear(sharpened) * imageColor.rgb, imageColor.a);
+}

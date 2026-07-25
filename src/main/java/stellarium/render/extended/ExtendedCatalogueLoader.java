@@ -367,8 +367,30 @@ final class ExtendedCatalogueLoader {
 		if(!tile.has("maxBrightness"))
 			return 0.35f;
 		double surfaceMagnitude = tile.get("maxBrightness").getAsDouble();
-		double relativeFlux = Math.pow(10.0, -0.4 * (surfaceMagnitude - 12.0));
-		return (float) Math.max(0.08, Math.min(1.0, 0.42 * Math.sqrt(relativeFlux)));
+		double luminance = 2.0 * 2025000.0
+				* Math.exp(-0.92103 * (surfaceMagnitude + 12.12331))
+				/ ((1.0 / 60.0) * (1.0 / 60.0));
+		return (float) Math.min(1.0, adaptLuminanceScaled(luminance, 1.0));
+	}
+
+	/**
+	 * Devlin tone adaptation used by Stellarium. A dark-sky adaptation
+	 * luminance of 1 cd/m2 keeps the bundled image set calibrated without
+	 * lifting every RGB texture's black background.
+	 */
+	private static double adaptLuminanceScaled(double luminance,
+			double worldAdaptationLuminance) {
+		double displayAdaptationLuminance = 50.0;
+		double alphaWorld = 0.4 * Math.log10(worldAdaptationLuminance) + 1.619;
+		double betaWorld = 6.1642;
+		double logDisplay = Math.log10(displayAdaptationLuminance);
+		double alphaDisplay = 0.4 * logDisplay + 1.619;
+		double betaDisplay = -0.4 * logDisplay * logDisplay
+				+ 0.218 * logDisplay + 6.1642;
+		double exponent = alphaWorld / alphaDisplay;
+		double scale = Math.pow(10.0,
+				(betaWorld - betaDisplay) / alphaDisplay) / (Math.PI * 0.0001);
+		return Math.pow(luminance * Math.PI * 0.0001, exponent) * scale / 100.0;
 	}
 
 	private static void appendSkyImagePolygon(BufferBuilderEx builder, JsonArray world,

@@ -49,7 +49,9 @@ public abstract class SolarObject extends StellarObject {
 
 	protected Vector3 initialEarthPos;
 	public void initialUpdate() {
-		this.initialEarthPos = this.earthPos;
+		// Horizontal periods need the epoch direction, not an alias to the
+		// mutable vector updated every tick.
+		this.initialEarthPos = new Vector3(this.earthPos);
 	}
 
 	public boolean isIn(SearchRegion region, SpCoord cache) {
