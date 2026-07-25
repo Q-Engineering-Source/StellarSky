@@ -1,0 +1,10 @@
+#version 120
+
+varying vec2 imageTexCoord;
+varying vec4 imageColor;
+uniform sampler2D skyImage;
+
+void main() {
+	vec4 image = texture2D(skyImage, imageTexCoord);
+	gl_FragColor = vec4(image.rgb * imageColor.rgb, imageColor.a);
+}

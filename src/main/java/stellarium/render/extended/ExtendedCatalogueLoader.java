@@ -10,11 +10,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import org.apache.commons.io.IOUtils;
 import org.lwjgl.opengl.GL11;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.util.ResourceLocation;
@@ -173,7 +177,7 @@ final class ExtendedCatalogueLoader {
 						float brightness = deepSkyDisplayBrightness(magnitude,
 								majorArcMinutes, minorArcMinutes);
 						float[] color = deepSkyColor(type);
-						String texture = deepSkyTexture(fields, type);
+						String texture = "";
 						BufferBuilderEx builder = builders.get(texture);
 						if(builder == null) {
 							builder = new BufferBuilderEx(1 << 20);
@@ -218,26 +222,6 @@ final class ExtendedCatalogueLoader {
 			return Integer.parseInt(fields[index].trim());
 		} catch(NumberFormatException ignored) {
 			return fallback;
-		}
-	}
-
-	private static String deepSkyTexture(String[] fields, String type) {
-		// Stellarium's photographic DSO set is keyed by Messier number. Keep
-		// this small atlas-like set in separate batches so each object retains
-		// its real image without a draw call per object.
-		int messier = parseInt(fields, 18, 0);
-		switch(messier) {
-		case 8: return "m8";
-		case 13: return "m13";
-		case 20: return "m20";
-		case 31: return "m31";
-		case 33: return "m33";
-		case 45: return "pleiades";
-		case 81: return "m81";
-		default:
-			if(type.contains("HII") || type.contains("RN") || type.contains("EN"))
-				return "n7000";
-			return "";
 		}
 	}
 
@@ -306,6 +290,147 @@ final class ExtendedCatalogueLoader {
 				.color(color[0] * brightness, color[1] * brightness,
 						color[2] * brightness, brightness)
 				.endVertex();
+	}
+
+	static DeepSkyCatalogue loadDeepSkyImages() throws IOException {
+		InputStream input = ExtendedCatalogueLoader.class.getResourceAsStream(
+				"/assets/stellarium/dso/textures.json");
+		if(input == null)
+			throw new IOException("Missing Stellarium deep-sky texture manifest");
+
+		JsonObject root;
+		try(InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+			root = new JsonParser().parse(reader).getAsJsonObject();
+		}
+
+		JsonArray tiles = root.getAsJsonArray("subTiles");
+		if(tiles == null)
+			throw new IOException("Stellarium deep-sky texture manifest has no subTiles");
+
+		List<DeepSkyBatch> batches = new ArrayList<>(tiles.size());
+		int polygonCount = 0;
+		for(JsonElement tileElement : tiles) {
+			if(!tileElement.isJsonObject())
+				continue;
+			JsonObject tile = tileElement.getAsJsonObject();
+			if(!tile.has("imageUrl") || !tile.has("worldCoords"))
+				continue;
+			String imageUrl = tile.get("imageUrl").getAsString();
+			if(imageUrl.contains("..") || imageUrl.indexOf('/') >= 0
+					|| imageUrl.indexOf('\\') >= 0)
+				continue;
+
+			JsonArray worldPolygons = tile.getAsJsonArray("worldCoords");
+			JsonArray texturePolygons = tile.getAsJsonArray("textureCoords");
+			if(worldPolygons == null || texturePolygons == null
+					|| worldPolygons.size() != texturePolygons.size())
+				continue;
+
+			BufferBuilderEx builder = new BufferBuilderEx(65536);
+			try {
+				builder.begin(GL11.GL_QUADS, FloatVertexFormats.POSITION_TEX_COLOR_F);
+				float brightness = imageBrightness(tile);
+				int batchPolygons = 0;
+				Bounds bounds = new Bounds();
+				for(int polygon = 0; polygon < worldPolygons.size(); polygon++) {
+					JsonArray world = worldPolygons.get(polygon).getAsJsonArray();
+					JsonArray texture = texturePolygons.get(polygon).getAsJsonArray();
+					if(world.size() != 4 || texture.size() != 4)
+						continue;
+					appendSkyImagePolygon(builder, world, texture, brightness, bounds);
+					batchPolygons++;
+				}
+				if(batchPolygons == 0) {
+					abortBuild(builder);
+					continue;
+				}
+				builder.finishDrawing();
+				VertexBufferEx buffer = new VertexBufferEx();
+				buffer.upload(builder);
+				ResourceLocation texture = new ResourceLocation(
+						StellarSkyReferences.RESOURCE_ID, "dso/" + imageUrl);
+				batches.add(new DeepSkyBatch(buffer, batchPolygons, texture, bounds));
+				polygonCount += batchPolygons;
+			} catch(RuntimeException exception) {
+				abortBuild(builder);
+				throw exception;
+			}
+		}
+
+		StellarSky.INSTANCE.getLogger().info(
+				"Loaded {} Stellarium deep-sky images with {} spherical polygons",
+				batches.size(), polygonCount);
+		return new DeepSkyCatalogue(batches, polygonCount);
+	}
+
+	private static float imageBrightness(JsonObject tile) {
+		if(!tile.has("maxBrightness"))
+			return 0.35f;
+		double surfaceMagnitude = tile.get("maxBrightness").getAsDouble();
+		double relativeFlux = Math.pow(10.0, -0.4 * (surfaceMagnitude - 12.0));
+		return (float) Math.max(0.08, Math.min(1.0, 0.42 * Math.sqrt(relativeFlux)));
+	}
+
+	private static void appendSkyImagePolygon(BufferBuilderEx builder, JsonArray world,
+			JsonArray texture, float brightness, Bounds bounds) {
+		Vector3[] positions = new Vector3[4];
+		double[][] uv = new double[4][2];
+		for(int vertex = 0; vertex < 4; vertex++) {
+			JsonArray coordinate = world.get(vertex).getAsJsonArray();
+			positions[vertex] = new SpCoord(coordinate.get(0).getAsDouble(),
+					coordinate.get(1).getAsDouble()).getVec();
+			JsonArray textureCoordinate = texture.get(vertex).getAsJsonArray();
+			uv[vertex][0] = textureCoordinate.get(0).getAsDouble();
+			uv[vertex][1] = textureCoordinate.get(1).getAsDouble();
+		}
+
+		int subdivisions = 1;
+		for(int edge = 0; edge < 4; edge++) {
+			double dot = Math.max(-1.0, Math.min(1.0,
+					positions[edge].dot(positions[(edge + 1) % 4])));
+			subdivisions = Math.max(subdivisions,
+					(int) Math.ceil(Math.toDegrees(Math.acos(dot)) / 4.0));
+		}
+		subdivisions = Math.min(16, subdivisions);
+
+		for(int y = 0; y < subdivisions; y++) {
+			double v0 = (double) y / subdivisions;
+			double v1 = (double) (y + 1) / subdivisions;
+			for(int x = 0; x < subdivisions; x++) {
+				double u0 = (double) x / subdivisions;
+				double u1 = (double) (x + 1) / subdivisions;
+				addSkyImageVertex(builder, positions, uv, u0, v0, brightness, bounds);
+				addSkyImageVertex(builder, positions, uv, u1, v0, brightness, bounds);
+				addSkyImageVertex(builder, positions, uv, u1, v1, brightness, bounds);
+				addSkyImageVertex(builder, positions, uv, u0, v1, brightness, bounds);
+			}
+		}
+	}
+
+	private static void addSkyImageVertex(BufferBuilderEx builder, Vector3[] positions,
+			double[][] uv, double u, double v, float brightness, Bounds bounds) {
+		Vector3 position = bilinearVector(positions, u, v).normalize().scale(99.25);
+		bounds.include(position);
+		double textureU = bilinear(uv[0][0], uv[1][0], uv[2][0], uv[3][0], u, v);
+		double textureV = bilinear(uv[0][1], uv[1][1], uv[2][1], uv[3][1], u, v);
+		builder.pos(position).tex(textureU, textureV)
+				.color(brightness, brightness, brightness, 1.0f).endVertex();
+	}
+
+	private static Vector3 bilinearVector(Vector3[] positions, double u, double v) {
+		return new Vector3(
+				bilinear(positions[0].getX(), positions[1].getX(),
+						positions[2].getX(), positions[3].getX(), u, v),
+				bilinear(positions[0].getY(), positions[1].getY(),
+						positions[2].getY(), positions[3].getY(), u, v),
+				bilinear(positions[0].getZ(), positions[1].getZ(),
+						positions[2].getZ(), positions[3].getZ(), u, v));
+	}
+
+	private static double bilinear(double c00, double c10, double c11, double c01,
+			double u, double v) {
+		return c00 * (1.0 - u) * (1.0 - v) + c10 * u * (1.0 - v)
+				+ c11 * u * v + c01 * (1.0 - u) * v;
 	}
 
 	private static boolean validMagnitude(float magnitude) {
@@ -444,11 +569,36 @@ final class ExtendedCatalogueLoader {
 		final VertexBufferEx buffer;
 		final int count;
 		final ResourceLocation texture;
+		final Bounds bounds;
 
 		DeepSkyBatch(VertexBufferEx buffer, int count, ResourceLocation texture) {
+			this(buffer, count, texture, null);
+		}
+
+		DeepSkyBatch(VertexBufferEx buffer, int count, ResourceLocation texture,
+				Bounds bounds) {
 			this.buffer = buffer;
 			this.count = count;
 			this.texture = texture;
+			this.bounds = bounds;
+		}
+	}
+
+	static final class Bounds {
+		double minX = Double.POSITIVE_INFINITY;
+		double minY = Double.POSITIVE_INFINITY;
+		double minZ = Double.POSITIVE_INFINITY;
+		double maxX = Double.NEGATIVE_INFINITY;
+		double maxY = Double.NEGATIVE_INFINITY;
+		double maxZ = Double.NEGATIVE_INFINITY;
+
+		void include(Vector3 vector) {
+			minX = Math.min(minX, vector.getX());
+			minY = Math.min(minY, vector.getY());
+			minZ = Math.min(minZ, vector.getZ());
+			maxX = Math.max(maxX, vector.getX());
+			maxY = Math.max(maxY, vector.getY());
+			maxZ = Math.max(maxZ, vector.getZ());
 		}
 	}
 }

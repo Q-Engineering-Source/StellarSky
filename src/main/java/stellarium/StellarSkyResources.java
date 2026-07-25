@@ -118,6 +118,14 @@ public class StellarSkyResources {
 	public static final ResourceLocation fragmentExtendedDeepSky =
 			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "shaders/extended_deep_sky.psh");
 
+	public static final ResourceLocation vertexExtendedDeepSkyImage =
+			new ResourceLocation(StellarSkyReferences.RESOURCE_ID,
+					"shaders/extended_deep_sky_image.vsh");
+
+	public static final ResourceLocation fragmentExtendedDeepSkyImage =
+			new ResourceLocation(StellarSkyReferences.RESOURCE_ID,
+					"shaders/extended_deep_sky_image.psh");
+
 	public static final ResourceLocation vertexTexured =
 			new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "shaders/textured.vsh");
 

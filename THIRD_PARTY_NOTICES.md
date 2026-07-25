@@ -11,7 +11,10 @@ contributors. The bundled `stars_*.cat` files are the Stellarium 26.2
 Hipparcos/Gaia DR3 catalogues, format version 27. The bundled
 `dso_catalog.txt` is the Stellarium 26.2 deep-sky catalogue, standard edition
 version 3.23. The extended renderer's `extended_milkyway.png` is Stellarium
-26.2's official full-sky Milky Way texture.
+26.2's official full-sky Milky Way texture. The bundled `dso/*.png` collection
+and `dso/textures.json` are Stellarium 26.2's default deep-sky image set. The
+manifest retains the per-image author and source credits, exact J2000 sky
+coordinates, texture coordinates, brightness metadata, and multi-tile layout.
 
 Source: https://github.com/Stellarium/stellarium
 
@@ -23,9 +26,6 @@ version. See `LICENSE`.
 
 The catalogue data contains material compiled from astronomical catalogues
 including Hipparcos, Gaia DR3, NGC, IC, Messier, Caldwell, PGC and UGC.
-Individual source references are retained in the comments at the end of
-`dso_catalog.txt`.
-
-No Stellarium deep-sky image collection is bundled by the extended renderer.
-The existing Stellar Sky Messier textures remain separate assets with their
-original attribution metadata.
+Individual catalogue references are retained in the comments at the end of
+`dso_catalog.txt`. Individual image attributions are retained verbatim in
+`dso/textures.json`.

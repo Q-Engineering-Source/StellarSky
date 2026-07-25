@@ -7,6 +7,8 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 
 import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.culling.ClippingHelper;
+import net.minecraft.client.renderer.culling.ClippingHelperImpl;
 import stellarapi.api.lib.math.Matrix3;
 import stellarium.StellarSky;
 import stellarium.StellarSkyResources;
@@ -27,9 +29,11 @@ public enum ExtendedSkyRenderer {
 
 	private ExtendedCatalogueLoader.CatalogueBuffer stars;
 	private ExtendedCatalogueLoader.DeepSkyCatalogue deepSky;
+	private ExtendedCatalogueLoader.DeepSkyCatalogue deepSkyImages;
 	private ExtendedCatalogueLoader.CatalogueBuffer milkyWay;
 	private IShaderObject starShader;
 	private IShaderObject deepSkyShader;
+	private IShaderObject deepSkyImageShader;
 	private float loadedStarLimit = Float.NaN;
 	private float loadedDeepSkyLimit = Float.NaN;
 	private boolean ready;
@@ -46,8 +50,13 @@ public enum ExtendedSkyRenderer {
 				this.deepSkyShader = ShaderHelper.getInstance().buildShader("extended_deep_sky",
 						StellarSkyResources.vertexExtendedDeepSky,
 						StellarSkyResources.fragmentExtendedDeepSky);
+				this.deepSkyImageShader = ShaderHelper.getInstance().buildShader(
+						"extended_deep_sky_images",
+						StellarSkyResources.vertexExtendedDeepSkyImage,
+						StellarSkyResources.fragmentExtendedDeepSkyImage);
 			}
-			if(starShader == null || (!settings.lowPowerRenderer && deepSkyShader == null))
+			if(starShader == null || (!settings.lowPowerRenderer
+					&& (deepSkyShader == null || deepSkyImageShader == null)))
 				throw new IOException("Extended sky shader compilation failed");
 
 			if(stars == null || loadedStarLimit != settings.extendedStarMagnitudeLimit) {
@@ -65,6 +74,8 @@ public enum ExtendedSkyRenderer {
 				}
 				if(milkyWay == null)
 					milkyWay = ExtendedCatalogueLoader.buildMilkyWay();
+				if(deepSkyImages == null)
+					deepSkyImages = ExtendedCatalogueLoader.loadDeepSkyImages();
 			}
 			ready = true;
 		} catch(Exception exception) {
@@ -89,9 +100,11 @@ public enum ExtendedSkyRenderer {
 		try {
 			if(!settings.lowPowerRenderer && settings.renderMilkyWay)
 				renderMilkyWay(settings);
-			if(!settings.lowPowerRenderer && settings.renderDeepSky
-					&& settings.renderDeepSkyCatalog)
-				renderDeepSky(info);
+			if(!settings.lowPowerRenderer && settings.renderDeepSky) {
+				renderDeepSkyImages();
+				if(settings.renderDeepSkyCatalog)
+					renderDeepSky(info);
+			}
 			if(settings.renderBrightStars)
 				renderStars(settings, info);
 		} finally {
@@ -139,6 +152,31 @@ public enum ExtendedSkyRenderer {
 		deepSkyShader.releaseShader();
 		GlStateManager.disableBlend();
 		GlStateManager.enableTexture2D();
+	}
+
+	private void renderDeepSkyImages() {
+		GlStateManager.enableTexture2D();
+		GlStateManager.enableBlend();
+		GlStateManager.tryBlendFuncSeparate(GL11.GL_ONE, GL11.GL_ONE,
+				GL11.GL_ONE, GL11.GL_ONE);
+		deepSkyImageShader.bindShader();
+		deepSkyImageShader.getField("skyImage").setInteger(0);
+		ClippingHelper clipping = ClippingHelperImpl.getInstance();
+		for(ExtendedCatalogueLoader.DeepSkyBatch batch : deepSkyImages.batches) {
+			ExtendedCatalogueLoader.Bounds bounds = batch.bounds;
+			if(bounds != null && !clipping.isBoxInFrustum(bounds.minX, bounds.minY,
+					bounds.minZ, bounds.maxX, bounds.maxY, bounds.maxZ))
+				continue;
+			net.minecraft.client.Minecraft.getMinecraft().getTextureManager()
+					.bindTexture(batch.texture);
+			GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER,
+					GL11.GL_LINEAR);
+			GlStateManager.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER,
+					GL11.GL_LINEAR);
+			batch.buffer.drawArrays();
+		}
+		deepSkyImageShader.releaseShader();
+		GlStateManager.disableBlend();
 	}
 
 	private void renderStars(ClientSettings settings, StellarRI info) {
