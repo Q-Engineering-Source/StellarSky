@@ -7,8 +7,6 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 
 import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.culling.ClippingHelper;
-import net.minecraft.client.renderer.culling.ClippingHelperImpl;
 import stellarapi.api.lib.math.Matrix3;
 import stellarium.StellarSky;
 import stellarium.StellarSkyResources;
@@ -109,6 +107,13 @@ public enum ExtendedSkyRenderer {
 				renderStars(settings, info);
 		} finally {
 			ShaderHelper.getInstance().releaseCurrentShader();
+			// StellarRenderer enters this layer with additive blending and
+			// depth writes disabled. Restore that contract for subsequent
+			// celestial layers instead of leaking the last sub-pass state.
+			GlStateManager.enableBlend();
+			GlStateManager.blendFunc(GL11.GL_ONE, GL11.GL_ONE);
+			GlStateManager.disableDepth();
+			GlStateManager.depthMask(false);
 			GlStateManager.enableTexture2D();
 			GlStateManager.color(1.0f, 1.0f, 1.0f, 1.0f);
 			GlStateManager.popMatrix();
@@ -161,11 +166,10 @@ public enum ExtendedSkyRenderer {
 				GL11.GL_ONE, GL11.GL_ONE);
 		deepSkyImageShader.bindShader();
 		deepSkyImageShader.getField("skyImage").setInteger(0);
-		ClippingHelper clipping = ClippingHelperImpl.getInstance();
+		LocalFrustum clipping = LocalFrustum.capture();
 		for(ExtendedCatalogueLoader.DeepSkyBatch batch : deepSkyImages.batches) {
 			ExtendedCatalogueLoader.Bounds bounds = batch.bounds;
-			if(bounds != null && !clipping.isBoxInFrustum(bounds.minX, bounds.minY,
-					bounds.minZ, bounds.maxX, bounds.maxY, bounds.maxZ))
+			if(bounds != null && !clipping.isBoxInFrustum(bounds))
 				continue;
 			net.minecraft.client.Minecraft.getMinecraft().getTextureManager()
 					.bindTexture(batch.texture);
@@ -232,5 +236,75 @@ public enum ExtendedSkyRenderer {
 	private static void delete(ExtendedCatalogueLoader.DeepSkyCatalogue buffer) {
 		if(buffer != null)
 			buffer.delete();
+	}
+
+	/**
+	 * Captures the current sky matrices without touching Minecraft's shared
+	 * ClippingHelperImpl. Reinitializing that singleton here corrupts the
+	 * frustum later used for terrain chunk culling.
+	 */
+	private static final class LocalFrustum {
+		private final float[][] planes = new float[6][4];
+
+		static LocalFrustum capture() {
+			FloatBuffer modelView = BufferUtils.createFloatBuffer(16);
+			FloatBuffer projection = BufferUtils.createFloatBuffer(16);
+			GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, modelView);
+			GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, projection);
+
+			float[] model = new float[16];
+			float[] project = new float[16];
+			modelView.get(model);
+			projection.get(project);
+			float[] clip = multiply(project, model);
+
+			LocalFrustum result = new LocalFrustum();
+			result.setPlane(0, clip, 3, 0, 1.0f);
+			result.setPlane(1, clip, 3, 0, -1.0f);
+			result.setPlane(2, clip, 3, 1, 1.0f);
+			result.setPlane(3, clip, 3, 1, -1.0f);
+			result.setPlane(4, clip, 3, 2, 1.0f);
+			result.setPlane(5, clip, 3, 2, -1.0f);
+			return result;
+		}
+
+		private static float[] multiply(float[] left, float[] right) {
+			float[] result = new float[16];
+			for(int column = 0; column < 4; column++) {
+				for(int row = 0; row < 4; row++) {
+					float value = 0.0f;
+					for(int index = 0; index < 4; index++)
+						value += left[index * 4 + row] * right[column * 4 + index];
+					result[column * 4 + row] = value;
+				}
+			}
+			return result;
+		}
+
+		private void setPlane(int plane, float[] matrix, int baseRow, int otherRow,
+				float sign) {
+			float lengthSquared = 0.0f;
+			for(int component = 0; component < 4; component++) {
+				float value = matrix[component * 4 + baseRow]
+						+ sign * matrix[component * 4 + otherRow];
+				planes[plane][component] = value;
+				if(component < 3)
+					lengthSquared += value * value;
+			}
+			float inverseLength = 1.0f / (float) Math.sqrt(lengthSquared);
+			for(int component = 0; component < 4; component++)
+				planes[plane][component] *= inverseLength;
+		}
+
+		boolean isBoxInFrustum(ExtendedCatalogueLoader.Bounds bounds) {
+			for(float[] plane : planes) {
+				double x = plane[0] >= 0.0f ? bounds.maxX : bounds.minX;
+				double y = plane[1] >= 0.0f ? bounds.maxY : bounds.minY;
+				double z = plane[2] >= 0.0f ? bounds.maxZ : bounds.minZ;
+				if(plane[0] * x + plane[1] * y + plane[2] * z + plane[3] < 0.0)
+					return false;
+			}
+			return true;
+		}
 	}
 }
