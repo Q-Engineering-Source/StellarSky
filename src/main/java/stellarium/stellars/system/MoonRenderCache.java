@@ -4,6 +4,7 @@ import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 import stellarapi.api.lib.math.SpCoord;
 import stellarapi.api.lib.math.Vector3;
+import stellarapi.api.optics.Wavelength;
 import stellarium.client.ClientSettings;
 import stellarium.render.stellars.layer.IObjRenderCache;
 import stellarium.stellars.OpticsHelper;
@@ -23,7 +24,9 @@ public class MoonRenderCache implements IObjRenderCache<Moon, SolarSystemClientS
 	protected Vector3 normal[][];
 	protected float surfBr[][];
 
-	protected float domination, brightness;
+	protected float domination;
+	protected float spriteRed, spriteGreen, spriteBlue;
+	protected int phaseIndex;
 
 	protected Vector3 buf = new Vector3();
 	protected float size;
@@ -46,13 +49,37 @@ public class MoonRenderCache implements IObjRenderCache<Moon, SolarSystemClientS
 		appPos.set(object.earthPos);
 		info.coordinate.getProjectionToGround().transform(this.appPos);
 		appPos.normalize();
+		appCoord.setWithVec(appPos);
 
 		this.domination = OpticsHelper.getDominationFromMag(object.currentMag);
+		double phaseCos = Math.max(-1.0, Math.min(1.0,
+				object.sunPos.dot(object.earthPos)
+						/ (object.sunPos.size() * object.earthPos.size())));
+		double phase = Math.acos(phaseCos) / (2.0 * Math.PI);
+		Vector3 phaseCross = new Vector3();
+		phaseCross.setCross(object.earthPos, object.sunPos);
+		if(phaseCross.dot(object.Pole) < 0.0)
+			phase = 1.0 - phase;
+		this.phaseIndex = (int) Math.floor(phase * 8.0 + 0.5) % 8;
+		double illumination = (1.0 + phaseCos) * 0.5;
+		double atlasIllumination =
+				(1.0 + Math.cos(this.phaseIndex * Math.PI / 4.0)) * 0.5;
+		double phaseCorrection = atlasIllumination > 1.0e-6
+				? Math.min(2.0, illumination / atlasIllumination) : 0.0;
+		double surfaceBrightness = object.brightness * phaseCorrection;
+		this.spriteRed = (float) surfaceBrightness
+				* CelestialBrightness.atmosphericTransmission(
+						info, appCoord, Wavelength.red);
+		this.spriteGreen = (float) surfaceBrightness
+				* CelestialBrightness.atmosphericTransmission(
+						info, appCoord, Wavelength.V);
+		this.spriteBlue = (float) surfaceBrightness
+				* CelestialBrightness.atmosphericTransmission(
+						info, appCoord, Wavelength.B);
 
 		this.size = (float) (object.radius / object.earthPos.size());
 		this.shouldRenderDominate = true; // TODO Proper render domination check
 
-		this.brightness = OpticsHelper.getBrightnessFromMag(object.currentMag);
 		this.shouldRender = true;
 
 		if(!this.shouldRender)
@@ -74,8 +101,6 @@ public class MoonRenderCache implements IObjRenderCache<Moon, SolarSystemClientS
 				pos[longc][latc].set(buf);
 			}
 		}
-		
-		this.brightness *= 1.0e-5f;
 	}
 
 	@SideOnly(Side.CLIENT)

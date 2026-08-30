@@ -41,7 +41,7 @@ public final class CommandStellarTime extends CommandBase {
 
 	@Override
 	public String getUsage(ICommandSender sender) {
-		return "/stellartime [dimension] <info|time|add|scale|pause|resume|reset|sync|real|location|latitude|longitude|offset> ...";
+		return "/stellartime [dimension] <info|time|add|scale|pause|resume|reset|sync|real|location|latitude|longitude|altitude|offset> ...";
 	}
 
 	@Override
@@ -98,6 +98,19 @@ public final class CommandStellarTime extends CommandBase {
 			send(sender, dimension, manager);
 			return;
 		}
+		if("timezone".equals(action) || "tz".equals(action)) {
+			requireArgCount(args, index, 2);
+			String value = args[index + 1];
+			if("server".equalsIgnoreCase(value) || "auto".equalsIgnoreCase(value)) {
+				manager.clearTimeZoneOverride(dimension);
+			} else {
+				manager.setTimeZoneOffsetMinutes(dimension, parseTimeZoneOffsetMinutes(value));
+			}
+			resetCorrection(server, dimension);
+			sync(server, dimension, manager);
+			send(sender, dimension, manager);
+			return;
+		}
 		if("sync".equals(action) || "system".equals(action) || "systemtime".equals(action)) {
 			requireArgCount(args, index, 2);
 			manager.setSystemTimeSyncEnabled(dimension, parseOnOff(args[index + 1]));
@@ -107,8 +120,11 @@ public final class CommandStellarTime extends CommandBase {
 			return;
 		}
 		if("real".equals(action)) {
-			requireArgCount(args, index, 3);
-			setLocation(server, dimension, parseDecimal(args[index + 1]), parseDecimal(args[index + 2]), manager);
+			requireArgRange(args, index, 3, 4);
+			setLocation(server, dimension, parseDecimal(args[index + 1]),
+					parseDecimal(args[index + 2]),
+					args.length == index + 4 ? parseAltitude(args[index + 3]) : 0.0,
+					manager);
 			manager.setSystemTimeSyncEnabled(dimension, true);
 			resetCorrection(server, dimension);
 			sync(server, dimension, manager);
@@ -116,8 +132,13 @@ public final class CommandStellarTime extends CommandBase {
 			return;
 		}
 		if("location".equals(action)) {
-			requireArgCount(args, index, 3);
-			setLocation(server, dimension, parseDecimal(args[index + 1]), parseDecimal(args[index + 2]), manager);
+			requireArgRange(args, index, 3, 4);
+			StellarManager.TimeState current = manager.getTimeStates().get(dimension);
+			double altitude = args.length == index + 4 ? parseAltitude(args[index + 3])
+					: current != null && current.hasLocationOverride()
+							? current.getAltitude() : 0.0;
+			setLocation(server, dimension, parseDecimal(args[index + 1]),
+					parseDecimal(args[index + 2]), altitude, manager);
 			send(sender, dimension, manager);
 			return;
 		}
@@ -126,7 +147,8 @@ public final class CommandStellarTime extends CommandBase {
 			StellarManager.TimeState current = manager.getTimeStates().get(dimension);
 			setLocation(server, dimension, parseDecimal(args[index + 1]),
 					current != null && current.hasLocationOverride() ? current.getLongitude()
-							: configuredLocation(server, dimension, false), manager);
+							: configuredLocation(server, dimension, false),
+					currentAltitude(current), manager);
 			send(sender, dimension, manager);
 			return;
 		}
@@ -136,7 +158,19 @@ public final class CommandStellarTime extends CommandBase {
 			setLocation(server, dimension,
 					current != null && current.hasLocationOverride() ? current.getLatitude()
 							: configuredLocation(server, dimension, true),
-					parseDecimal(args[index + 1]), manager);
+					parseDecimal(args[index + 1]), currentAltitude(current), manager);
+			send(sender, dimension, manager);
+			return;
+		}
+		if("altitude".equals(action) || "height".equals(action)) {
+			requireArgCount(args, index, 2);
+			StellarManager.TimeState current = manager.getTimeStates().get(dimension);
+			double latitude = current != null && current.hasLocationOverride()
+					? current.getLatitude() : configuredLocation(server, dimension, true);
+			double longitude = current != null && current.hasLocationOverride()
+					? current.getLongitude() : configuredLocation(server, dimension, false);
+			setLocation(server, dimension, latitude, longitude,
+					parseAltitude(args[index + 1]), manager);
 			send(sender, dimension, manager);
 			return;
 		}
@@ -145,7 +179,8 @@ public final class CommandStellarTime extends CommandBase {
 			StellarManager.TimeState current = manager.getTimeStates().get(dimension);
 			double latitude = current != null && current.hasLocationOverride() ? current.getLatitude()
 					: configuredLocation(server, dimension, true);
-			setLocation(server, dimension, latitude, parseDecimal(args[index + 1]) * 15.0, manager);
+			setLocation(server, dimension, latitude, parseDecimal(args[index + 1]) * 15.0,
+					currentAltitude(current), manager);
 			send(sender, dimension, manager);
 			return;
 		}
@@ -201,11 +236,11 @@ public final class CommandStellarTime extends CommandBase {
 		send(sender, dimension, manager);
 	}
 
-	private static void setLocation(MinecraftServer server, int dimension, double latitude, double longitude,
-			StellarManager manager) throws CommandException {
+	private static void setLocation(MinecraftServer server, int dimension, double latitude,
+			double longitude, double altitude, StellarManager manager) throws CommandException {
 		if(latitude < -90.0 || latitude > 90.0)
 			throw new CommandException("Latitude must be between -90 and 90.");
-		manager.setLocation(dimension, latitude, longitude);
+		manager.setLocation(dimension, latitude, longitude, altitude);
 		World targetWorld = server.getWorld(dimension);
 		if(targetWorld != null) {
 			StellarScene scene = StellarScene.getScene(targetWorld);
@@ -237,13 +272,23 @@ public final class CommandStellarTime extends CommandBase {
 		return latitude ? scene.getSettings().latitude : scene.getSettings().longitude;
 	}
 
+	private static double currentAltitude(StellarManager.TimeState state) {
+		return state != null && state.hasLocationOverride() ? state.getAltitude() : 0.0;
+	}
+
 	private static void send(ICommandSender sender, int dimension, StellarManager manager) {
 		StellarManager.TimeState state = manager.getTimeStates().get(dimension);
 		String scale = manager.isSystemTimeSyncEnabled(dimension) ? "system" : format(manager.getTimeMultiplier(dimension)) + "x";
 		if(manager.isSystemTimeSyncEnabled(dimension))
 			scale += " (resync " + manager.getSystemTimeSyncIntervalSeconds(dimension) + "s)";
 		String location = state != null && state.hasLocationOverride()
-				? ", lat " + format(state.getLatitude()) + ", lon " + format(state.getLongitude()) : "";
+				? ", lat " + format(state.getLatitude()) + ", lon " + format(state.getLongitude())
+						+ ", altitude " + format(state.getAltitude()) + "m" : "";
+		if(manager.isSystemTimeSyncEnabled(dimension)) {
+			int zone = manager.getSystemTimeZoneOffsetMinutes(dimension);
+			location += ", timezone UTC" + format(zone / 60.0)
+					+ (manager.hasTimeZoneOverride(dimension) ? " (dimension)" : " (server)");
+		}
 		sender.sendMessage(new TextComponentString("Stellar time dimension " + dimension + ": " + scale + location));
 	}
 
@@ -283,10 +328,12 @@ public final class CommandStellarTime extends CommandBase {
 
 		double latitude = 0.0;
 		double longitude = 0.0;
+		double altitude = 0.0;
 		StellarManager.TimeState configuredState = state;
 		if(configuredState != null && configuredState.hasLocationOverride()) {
 			latitude = configuredState.getLatitude();
 			longitude = configuredState.getLongitude();
+			altitude = configuredState.getAltitude();
 		} else {
 			StellarScene scene = StellarScene.getScene(world);
 			if(scene != null) {
@@ -297,7 +344,8 @@ public final class CommandStellarTime extends CommandBase {
 		Entity entity = sender.getCommandSenderEntity();
 		if(entity != null && entity.world != world)
 			entity = null;
-		ObserverSkyContext fallback = ObserverSkyContext.dimensionDefault(dimension, latitude, longitude);
+		ObserverSkyContext fallback =
+				ObserverSkyContext.dimensionDefault(dimension, latitude, longitude, altitude);
 		ObserverSkyContext observer = ObserverSkyResolvers.resolve(world, entity, fallback);
 		String observerName = entity == null ? "server" : entity.getName();
 		if(entity == null) {
@@ -344,8 +392,15 @@ public final class CommandStellarTime extends CommandBase {
 		double longitudeDifference = longitude - zoneMeridian;
 		longitudeDifference -= Math.floor((longitudeDifference + 180.0) / 360.0) * 360.0;
 		sender.sendMessage(new TextComponentString(String.format(Locale.ROOT,
-				"Timezone: UTC%+.2f, zone meridian %.3f deg, longitude solar correction %+.2f min (equation of time excluded).",
-				zoneOffsetMinutes / 60.0, zoneMeridian, longitudeDifference * 4.0)));
+				"Timezone: UTC%+.2f (%s), zone meridian %.3f deg, longitude solar correction %+.2f min (equation of time excluded).",
+				zoneOffsetMinutes / 60.0,
+				managerTimeZoneSource(world),
+				zoneMeridian, longitudeDifference * 4.0)));
+	}
+
+	private static String managerTimeZoneSource(World world) {
+		StellarManager manager = StellarManager.getManager(world.getMinecraftServer().getEntityWorld());
+		return manager.hasTimeZoneOverride(world.provider.getDimension()) ? "dimension" : "server";
 	}
 
 	private static double parseMultiplier(String value) throws CommandException {
@@ -363,6 +418,36 @@ public final class CommandStellarTime extends CommandBase {
 			return result;
 		} catch(NumberFormatException exception) {
 			throw new CommandException("Invalid number: " + value);
+		}
+	}
+
+	private static double parseAltitude(String value) throws CommandException {
+		double altitude = parseDecimal(value);
+		if(altitude < -12000.0 || altitude > 1.0e9)
+			throw new CommandException("Altitude must be between -12000 and 1000000000 meters.");
+		return altitude;
+	}
+
+	private static int parseTimeZoneOffsetMinutes(String value) throws CommandException {
+		String normalized = value.trim().toUpperCase(Locale.ROOT);
+		if(normalized.startsWith("UTC"))
+			normalized = normalized.substring(3);
+		if(normalized.isEmpty() || "+".equals(normalized) || "-".equals(normalized))
+			throw new CommandException("Invalid timezone offset: " + value);
+		try {
+			boolean negative = normalized.charAt(0) == '-';
+			if(normalized.charAt(0) == '+' || negative)
+				normalized = normalized.substring(1);
+			String[] parts = normalized.split(":", -1);
+			int hours = Integer.parseInt(parts[0]);
+			int minutes = parts.length == 2 ? Integer.parseInt(parts[1]) : 0;
+			if(hours < 0 || hours > 14 || minutes < 0 || minutes >= 60
+					|| (hours == 14 && minutes != 0))
+				throw new NumberFormatException(value);
+			int result = hours * 60 + minutes;
+			return negative ? -result : result;
+		} catch(NumberFormatException exception) {
+			throw new CommandException("Timezone must be UTC offset between -14:00 and +14:00.");
 		}
 	}
 
@@ -460,6 +545,13 @@ public final class CommandStellarTime extends CommandBase {
 			throw new CommandException("Invalid argument count.");
 	}
 
+	private static void requireArgRange(String[] args, int index, int minimum,
+			int maximum) throws CommandException {
+		int count = args.length - index;
+		if(count < minimum || count > maximum)
+			throw new CommandException("Invalid argument count.");
+	}
+
 	private static boolean isInteger(String value) {
 		try {
 			Integer.parseInt(value);
@@ -478,13 +570,14 @@ public final class CommandStellarTime extends CommandBase {
 		int index = args.length > 0 && isInteger(args[0]) ? 1 : 0;
 		if(args.length == index + 1)
 			return getListOfStringsMatchingLastWord(args, "info", "status", "set", "time", "add", "pause", "resume", "reset", "sync", "scale",
-					"real", "location", "Latitude", "Longitude", "LocalOffset", "resetlocation");
+					"real", "location", "Latitude", "Longitude", "Altitude",
+					"LocalOffset", "TimeZone", "resetlocation");
 		if(args.length == index + 2 && ("sync".equalsIgnoreCase(args[index])
 				|| "system".equalsIgnoreCase(args[index])))
 			return getListOfStringsMatchingLastWord(args, "on", "off", "yes", "no", "interval");
 		if(args.length == index + 2 && "set".equalsIgnoreCase(args[index]))
 			return getListOfStringsMatchingLastWord(args, "TimeMultiplier", "SystemTime", "Latitude",
-					"Longitude", "LocalOffset", "SyncInterval");
+					"Longitude", "Altitude", "LocalOffset", "SyncInterval");
 		return Collections.emptyList();
 	}
 }

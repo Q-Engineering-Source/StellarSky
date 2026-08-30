@@ -14,7 +14,10 @@ void main() {
 	vec4 image = texture2D(skyImage, imageTexCoord);
 	float edgeDistance = min(min(imageTexCoord.x, imageTexCoord.y),
 			min(1.0 - imageTexCoord.x, 1.0 - imageTexCoord.y));
-	float edgeFade = smoothstep(0.0, 0.035, edgeDistance);
-	vec3 signal = srgbToLinear(max(image.rgb - vec3(1.0 / 1024.0), vec3(0.0)));
-	gl_FragColor = vec4(signal * imageColor.rgb * edgeFade, imageColor.a);
+	float edgeFade = smoothstep(0.0, 0.08, edgeDistance);
+	vec3 signal = max(srgbToLinear(image.rgb) - vec3(0.0015), vec3(0.0));
+	float signalPeak = max(max(signal.r, signal.g), signal.b);
+	float blackFieldFade = smoothstep(0.00025, 0.003, signalPeak);
+	gl_FragColor = vec4(signal * imageColor.rgb * edgeFade * blackFieldFade,
+			imageColor.a);
 }

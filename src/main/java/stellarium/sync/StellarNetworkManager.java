@@ -45,7 +45,9 @@ public final class StellarNetworkManager {
 				net.minecraftforge.fml.common.FMLCommonHandler.instance().getMinecraftServerInstance().getEntityWorld())
 				.getTimeStates().get(dimension);
 		wrapper.sendToAll(new MessageTimeMultiplierSync(dimension, multiplier, systemTimeSync,
-				StellarSkyTime.getServerTimeOffsetMinutes(),
+				StellarManager.getManager(net.minecraftforge.fml.common.FMLCommonHandler.instance()
+						.getMinecraftServerInstance().getEntityWorld())
+						.getSystemTimeZoneOffsetMinutes(dimension),
 				state == null ? 60 : state.getSystemTimeSyncIntervalSeconds()));
 	}
 
@@ -53,7 +55,7 @@ public final class StellarNetworkManager {
 		for(java.util.Map.Entry<Integer, StellarManager.TimeState> entry : manager.getTimeStates().entrySet()) {
 			StellarManager.TimeState state = entry.getValue();
 			wrapper.sendTo(new MessageTimeMultiplierSync(entry.getKey(), state.getMultiplier(),
-					state.isSystemTimeSync(), StellarSkyTime.getServerTimeOffsetMinutes(),
+					state.isSystemTimeSync(), manager.getSystemTimeZoneOffsetMinutes(entry.getKey()),
 					state.getSystemTimeSyncIntervalSeconds()), player);
 		}
 		int currentDimension = player.world.provider.getDimension();
@@ -61,7 +63,7 @@ public final class StellarNetworkManager {
 			wrapper.sendTo(new MessageTimeMultiplierSync(currentDimension,
 					manager.getTimeMultiplier(currentDimension),
 					manager.isSystemTimeSyncEnabled(currentDimension),
-					StellarSkyTime.getServerTimeOffsetMinutes(),
+					manager.getSystemTimeZoneOffsetMinutes(currentDimension),
 					manager.getSystemTimeSyncIntervalSeconds(currentDimension)), player);
 		}
 	}
@@ -93,10 +95,12 @@ public final class StellarNetworkManager {
 		int dimension = world.provider.getDimension();
 		double latitude = 0.0;
 		double longitude = 0.0;
+		double altitude = 0.0;
 		StellarManager.TimeState state = manager.getTimeStates().get(dimension);
 		if(state != null && state.hasLocationOverride()) {
 			latitude = state.getLatitude();
 			longitude = state.getLongitude();
+			altitude = state.getAltitude();
 		} else {
 			StellarScene scene = StellarScene.getScene(world);
 			if(scene != null) {
@@ -104,6 +108,6 @@ public final class StellarNetworkManager {
 				longitude = scene.getSettings().longitude;
 			}
 		}
-		return ObserverSkyContext.dimensionDefault(dimension, latitude, longitude);
+		return ObserverSkyContext.dimensionDefault(dimension, latitude, longitude, altitude);
 	}
 }

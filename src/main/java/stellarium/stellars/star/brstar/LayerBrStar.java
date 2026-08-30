@@ -77,8 +77,9 @@ public class LayerBrStar extends LayerBgStar<IConfigHandler, INBTConfig> {
 			this.loadStarData(4.0);
 		
 		for(BgStar star : this.stars) {
-			if(star.hasName)
-				container.loadObject("star", star);
+			// Observation and HUD selection need the same complete catalogue that
+			// the render caches use, including stars without a common name.
+			container.loadObject("star", star);
 			container.addRenderCache(star, new StarRenderCache());
 		}
 	}

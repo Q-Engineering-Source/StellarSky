@@ -1,13 +1,15 @@
 package stellarium.stellars;
 
+import java.util.Random;
+
 import net.minecraftforge.common.config.Configuration;
 import stellarapi.api.lib.config.SimpleConfigHandler;
 import stellarapi.api.lib.config.property.ConfigPropertyDouble;
 import stellarapi.api.lib.math.Spmath;
 import stellarapi.api.optics.EyeDetector;
-import stellarium.util.math.CachedGaussianRandom;
 
 public class OpticsHelper extends SimpleConfigHandler {
+	private static final double REFERENCE_TWINKLE_AMOUNT = 0.3;
 	// Magnitude Base
 	private static final double MAG_BASE = Math.pow(10.0, 0.4);
 
@@ -26,11 +28,11 @@ public class OpticsHelper extends SimpleConfigHandler {
 
 	public static final OpticsHelper instance = new OpticsHelper();
 
-	private CachedGaussianRandom randomTurbulance = new CachedGaussianRandom(100, 3L);
+	private final Random randomTwinkle = new Random(3L);
 
 	private ConfigPropertyDouble propTurb;
 
-	private double turbulance;
+	private double twinkleAmount;
 
 	public OpticsHelper() {
 		this.propTurb = new ConfigPropertyDouble("Twinkling(Turbulance)", "", 1.0);
@@ -46,9 +48,9 @@ public class OpticsHelper extends SimpleConfigHandler {
 
 		super.setupConfig(config, category);
 
-		propTurb.setComment("Degree of the twinkling effect of star.\n"
-				+ "It determines the turbulance of atmosphere, which actually cause the twinkling effect. "
-				+ "The greater the value, the more the stars will twinkle. Default is 1.0. To disable set to 0.0");
+		propTurb.setComment("Relative strength of atmospheric star twinkling.\n"
+				+ "1.0 matches Stellarium's reference effect: up to 30% dimming at "
+				+ "the horizon and 3% at the zenith. Set to 0.0 to disable.");
 		propTurb.setRequiresMcRestart(false);
 		propTurb.setLanguageKey("config.property.client.turbulance");
 		propTurb.setMinValue(0.0);
@@ -58,7 +60,9 @@ public class OpticsHelper extends SimpleConfigHandler {
 	@Override
 	public void loadFromConfig(Configuration config, String category) {
 		super.loadFromConfig(config, category);
-		this.turbulance = propTurb.getDouble() * 4.0;
+		// Preserve the historic 0..2 setting while making 1.0 match
+		// Stellarium's reference horizon attenuation of 0.3.
+		this.twinkleAmount = propTurb.getDouble() * REFERENCE_TWINKLE_AMOUNT;
 	}
 
 	@Override
@@ -66,8 +70,23 @@ public class OpticsHelper extends SimpleConfigHandler {
 		// Simple configuration, saves nothing
 	}
 
-	public static float turbulance() {
-		return (float) (instance.turbulance * instance.randomTurbulance.nextGaussian() * 0.1);
+	public static float twinkleAmount() {
+		return (float) instance.twinkleAmount;
+	}
+
+	/**
+	 * Stellarium-style altitude response: full at the horizon and 10% at
+	 * zenith. The input is the sine of apparent altitude.
+	 */
+	public static float twinkleAltitudeFactor(double sinAltitude) {
+		return (float) Math.max(0.1, Math.min(1.0, 1.0 - 0.9 * sinAltitude));
+	}
+
+	/** Per-update luminance multiplier for the legacy star renderer. */
+	public static float twinkleBrightness(double sinAltitude) {
+		float attenuation = twinkleAltitudeFactor(sinAltitude)
+				* twinkleAmount() * instance.randomTwinkle.nextFloat();
+		return Math.max(0.0f, 1.0f - attenuation);
 	}
 
 	public static float getBrightnessFromMag(double magnitude) {

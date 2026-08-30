@@ -36,9 +36,14 @@ public final class ObserverSkyContext {
 	}
 
 	public static ObserverSkyContext dimensionDefault(int dimension, double latitude, double longitude) {
+		return dimensionDefault(dimension, latitude, longitude, 0.0);
+	}
+
+	public static ObserverSkyContext dimensionDefault(int dimension, double latitude,
+			double longitude, double altitude) {
 		return new ObserverSkyContext(dimension, DEFAULT_SYSTEM,
 				new ResourceLocation("stellarium", "dimension/" + dimension), DEFAULT_FRAME,
-				latitude, longitude, 0.0);
+				latitude, longitude, altitude);
 	}
 
 	public int getDimension() {

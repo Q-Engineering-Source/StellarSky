@@ -15,5 +15,5 @@ void main() {
 	vec4 textureHalo = texture2D(starHalo, gl_PointCoord);
 	float textureProfile = dot(textureHalo.rgb, vec3(0.3333));
 	float profile = textureProfile + 0.35 * (core + 0.32 * halo);
-	gl_FragColor = vec4(starColor * starIntensity * profile, profile);
+	gl_FragColor = vec4(starColor * starIntensity * profile, 1.0);
 }

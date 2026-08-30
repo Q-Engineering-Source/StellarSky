@@ -19,18 +19,33 @@ public final class TimeMultiplierHud {
 			return;
 
 		double multiplier = StellarSkyTime.getMultiplier(minecraft.world);
-		if(StellarSkyTime.isSystemTimeSyncEnabled(minecraft.world)) {
-			minecraft.fontRenderer.drawStringWithShadow("Time: SYSTEM", 2, 2, 0xFFFFFF);
-			return;
-		}
-		if(multiplier == 1.0)
+		boolean systemTimeSync = StellarSkyTime.isSystemTimeSyncEnabled(minecraft.world);
+		if(multiplier == 1.0 && !systemTimeSync)
 			return;
 
 		String scale = multiplier == Math.rint(multiplier) ? Long.toString((long) multiplier)
 				: String.format(java.util.Locale.ROOT, "%.3f", multiplier);
-		String text = multiplier == 0.0 ? "Time: PAUSED"
+		String text = systemTimeSync ? "Time: SYSTEM"
+				: multiplier == 0.0 ? "Time: PAUSED"
 				: multiplier < 0.0 ? "Time: " + scale.substring(1) + "x (Reverse)"
 				: "Time: " + scale + "x";
-		minecraft.fontRenderer.drawStringWithShadow(text, 2, 2, 0xFFFFFF);
+		int y = 2;
+		minecraft.fontRenderer.drawStringWithShadow(text, 2, y, 0xFFFFFF);
+		y += 10;
+
+		int mapped = StellarSkyTime.getMappedTimeZoneOffsetMinutes(minecraft.world);
+		int localSolar = StellarSkyTime.getLocalSolarTimeOffsetMinutes(minecraft.world);
+		int system = StellarSkyTime.getClientSystemTimeOffsetMinutes();
+		minecraft.fontRenderer.drawStringWithShadow("Mapped TZ: " + formatOffset(mapped), 2, y, 0xFFFFFF);
+		minecraft.fontRenderer.drawStringWithShadow("Local solar: " + formatOffset(localSolar), 2, y + 10, 0xFFFFFF);
+		minecraft.fontRenderer.drawStringWithShadow("System TZ: "
+				+ StellarSkyTime.getClientSystemTimeZoneId() + " " + formatOffset(system), 2, y + 20, 0xFFFFFF);
+	}
+
+	private static String formatOffset(int minutes) {
+		int sign = minutes < 0 ? -1 : 1;
+		int absolute = Math.abs(minutes);
+		return String.format(java.util.Locale.ROOT, "UTC%c%02d:%02d",
+				sign < 0 ? '-' : '+', absolute / 60, absolute % 60);
 	}
 }

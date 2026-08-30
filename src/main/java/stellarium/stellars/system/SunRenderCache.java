@@ -4,6 +4,7 @@ import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 import stellarapi.api.lib.math.SpCoord;
 import stellarapi.api.lib.math.Vector3;
+import stellarapi.api.optics.Wavelength;
 import stellarium.client.ClientSettings;
 import stellarium.render.stellars.layer.IObjRenderCache;
 import stellarium.stellars.render.ICelestialObjectRenderer;
@@ -14,6 +15,7 @@ public class SunRenderCache implements IObjRenderCache<Sun, SolarSystemClientSet
 	protected SpCoord appCoord = new SpCoord();
 	protected Vector3 appPos = new Vector3();
 	protected float size;
+	protected float spriteRed, spriteGreen, spriteBlue;
 	protected int latn, longn;
 
 	protected SpCoord cache = new SpCoord();
@@ -36,8 +38,19 @@ public class SunRenderCache implements IObjRenderCache<Sun, SolarSystemClientSet
 		appPos.set(object.earthPos);
 		info.coordinate.getProjectionToGround().transform(this.appPos);
 		appPos.normalize();
+		appCoord.setWithVec(appPos);
 
 		this.size = (float) (object.radius / object.earthPos.size());
+		double relativeFlux = 1.0 / object.earthPos.size2();
+		this.spriteRed = (float) relativeFlux
+				* CelestialBrightness.atmosphericTransmission(
+						info, appCoord, Wavelength.red);
+		this.spriteGreen = (float) relativeFlux
+				* CelestialBrightness.atmosphericTransmission(
+						info, appCoord, Wavelength.V);
+		this.spriteBlue = (float) relativeFlux
+				* CelestialBrightness.atmosphericTransmission(
+						info, appCoord, Wavelength.B);
 		
 		int latc, longc;
 		for(longc=0; longc<longn; longc++){

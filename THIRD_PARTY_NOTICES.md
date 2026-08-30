@@ -29,3 +29,12 @@ including Hipparcos, Gaia DR3, NGC, IC, Messier, Caldwell, PGC and UGC.
 Individual catalogue references are retained in the comments at the end of
 `dso_catalog.txt`. Individual image attributions are retained verbatim in
 `dso/textures.json`.
+
+The object-information overlay also includes names from Stellarium sky-culture
+data: `common_star_names.fab` is the common English star-name list,
+`modern_iau.json` supplies modern English deep-sky names, while
+`star_names.zh_CN.fab` and `dso_names.zh_CN.fab` are from the Chinese sky
+culture. The Chinese sky-culture name data is licensed CC BY-SA 4.0; the
+English list follows the Stellarium project license. These files are sourced
+from the Stellarium repository above and are used only for stable bilingual
+object identification.

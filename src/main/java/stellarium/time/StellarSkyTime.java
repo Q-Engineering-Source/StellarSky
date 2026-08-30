@@ -127,7 +127,7 @@ public final class StellarSkyTime {
 			if(shouldCorrectSystemTime(world, now)) {
 				int offset = world.isRemote
 						? getClientState(world.provider.getDimension()).systemTimeOffsetMinutes
-						: getServerTimeOffsetMinutes();
+						: getSystemTimeOffsetMinutes(world);
 				return getSystemWorldTime(offset, now);
 			}
 			return currentTime + getScaledDelta(world, 72.0);
@@ -174,7 +174,65 @@ public final class StellarSkyTime {
 	public static int getSystemTimeOffsetMinutes(World world) {
 		if(world != null && world.isRemote)
 			return getClientState(world.provider.getDimension()).systemTimeOffsetMinutes;
+		if(world != null && world.getMinecraftServer() != null)
+			return StellarManager.getManager(world.getMinecraftServer().getEntityWorld())
+					.getSystemTimeZoneOffsetMinutes(world.provider.getDimension());
 		return getServerTimeOffsetMinutes();
+	}
+
+	/**
+	 * Returns the time-zone offset of the JVM running the client. This is
+	 * intentionally separate from the mapped world time-zone used by the
+	 * server's real-time clock.
+	 */
+	public static int getClientSystemTimeOffsetMinutes() {
+		return getServerTimeOffsetMinutes();
+	}
+
+	public static String getClientSystemTimeZoneId() {
+		return java.time.ZoneId.systemDefault().getId();
+	}
+
+	/**
+	 * Returns the mapped time-zone offset received from the server for a
+	 * client-side dimension.
+	 */
+	public static int getMappedTimeZoneOffsetMinutes(World world) {
+		if(world == null)
+			return getServerTimeOffsetMinutes();
+		if(world.isRemote)
+			return getClientState(world.provider.getDimension()).systemTimeOffsetMinutes;
+		return getSystemTimeOffsetMinutes(world);
+	}
+
+	/**
+	 * Returns the player's local solar-time offset derived from the active
+	 * observer longitude. Unlike a civil time-zone, this changes continuously
+	 * with longitude and is not affected by daylight-saving rules.
+	 */
+	public static int getLocalSolarTimeOffsetMinutes(World world) {
+		if(world == null)
+			return 0;
+		stellarium.api.observer.ObserverSkyContext context =
+				stellarium.world.ObserverSkyState.getClientContext(world);
+		if(context == null) {
+			StellarScene scene = StellarScene.getScene(world);
+			if(scene == null)
+				return 0;
+			double longitude = normalizeLongitude(scene.getSettings().longitude);
+			if(longitude > 180.0)
+				longitude -= 360.0;
+			return (int) Math.round(longitude / 15.0);
+		}
+		double longitude = context.getLongitude();
+		if(longitude > 180.0)
+			longitude -= 360.0;
+		return (int) Math.round(longitude / 15.0);
+	}
+
+	private static double normalizeLongitude(double longitude) {
+		double normalized = longitude % 360.0;
+		return normalized < 0.0 ? normalized + 360.0 : normalized;
 	}
 
 	public static long ticksForCivilSeconds(double seconds) {

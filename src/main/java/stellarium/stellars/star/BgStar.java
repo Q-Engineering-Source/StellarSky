@@ -49,6 +49,14 @@ public class BgStar extends StellarObject {
 		return (constellation + flamsteedId + bayerId).trim();
 	}
 
+	public int getCatalogNumber() {
+		return this.number;
+	}
+
+	public String getCatalogDesignation() {
+		return this.name;
+	}
+
 
 	@Override
 	public CelestialPeriod getHorizontalPeriod(ICCoordinates coords) {

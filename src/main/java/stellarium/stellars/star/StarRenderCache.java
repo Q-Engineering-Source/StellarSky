@@ -5,6 +5,7 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 import stellarapi.api.lib.config.IConfigHandler;
 import stellarapi.api.lib.math.SpCoord;
 import stellarapi.api.lib.math.Vector3;
+import stellarapi.api.optics.Wavelength;
 import stellarium.client.ClientSettings;
 import stellarium.render.stellars.layer.IObjRenderCache;
 import stellarium.render.stellars.layer.LayerRHelper;
@@ -32,7 +33,11 @@ public class StarRenderCache implements IObjRenderCache<BgStar, IConfigHandler> 
 		// TODO AA Mark object size to some buffer
 		StarColor starColor = StarColor.getColor(object.B_V);
 
-		double alpha = OpticsHelper.getBrightnessFromMag(OpticsHelper.turbulance() + object.mag);
+		double length = this.ref.size();
+		double sinAltitude = length > 0.0 ? this.ref.getZ() / length : 1.0;
+		float twinkle = info.sky.getSeeing(Wavelength.V) > 0.0
+				? OpticsHelper.twinkleBrightness(sinAltitude) : 1.0f;
+		double alpha = OpticsHelper.getBrightnessFromMag(object.mag) * twinkle;
 		this.red = (float) (alpha * starColor.r / 255.0);
 		this.green = (float) (alpha * starColor.g / 255.0);
 		this.blue = (float) (alpha * starColor.b / 255.0);

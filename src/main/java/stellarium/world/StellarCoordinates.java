@@ -93,7 +93,7 @@ public class StellarCoordinates implements ICCoordinates {
 		}
 		this.dayPeriod = new CelestialPeriod("Celestial Day", fixedDaylength,
 				(this.zeroTime / fixedDaylength + (this.systemTimeModel ? J2000_GMST / (2.0 * Math.PI) : 0.0)
-						- this.longitude / (2.0 * Math.PI) - 0.25) % 1.0);
+						+ this.longitude / (2.0 * Math.PI) - 0.25) % 1.0);
 	}
 
 	public void setLocationDegrees(double latitude, double longitude) {
@@ -109,7 +109,7 @@ public class StellarCoordinates implements ICCoordinates {
 			this.zeroTime = -(30000.0 + this.systemTimeOffsetMinutes * (24000.0 / 1440.0));
 			this.dayPeriod = new CelestialPeriod("Celestial Day", fixedDaylength,
 					(this.zeroTime / fixedDaylength + J2000_GMST / (2.0 * Math.PI)
-							- this.longitude / (2.0 * Math.PI) - 0.25) % 1.0);
+							+ this.longitude / (2.0 * Math.PI) - 0.25) % 1.0);
 		}
 	}
 
@@ -223,7 +223,7 @@ public class StellarCoordinates implements ICCoordinates {
 
 		return (this.zeroTime / periodLength
 				+ (this.systemTimeModel ? J2000_GMST / (2.0 * Math.PI) : 0.0)
-				- this.longitude / 2.0 / Math.PI - coord.x / 360.0 - 0.25)%1.0;
+				+ this.longitude / 2.0 / Math.PI - coord.x / 360.0 - 0.25)%1.0;
 	}
 
 	@Override

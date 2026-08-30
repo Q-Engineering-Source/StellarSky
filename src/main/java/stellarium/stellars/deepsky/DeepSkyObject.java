@@ -17,6 +17,7 @@ import stellarium.stellars.layer.StellarObject;
 
 public class DeepSkyObject extends StellarObject {
 	protected String name;
+	private final String catalogId;
 	protected Vector3 centerPos;
 	protected double magnitude;
 	private double width, height;
@@ -25,6 +26,7 @@ public class DeepSkyObject extends StellarObject {
 	public DeepSkyObject(String objectId, JsonObject object) throws IOException {
 		super(objectId, new ResourceLocation(StellarSkyReferences.MODID, object.get("name").getAsString()),
 				EnumObjectType.DeepSkyObject);
+		this.catalogId = objectId;
 		this.name = object.get("name").getAsString();
 		this.magnitude = PositionUtil.getMagnitude(object.get("magnitude").getAsString());
 		this.setStandardMagnitude(this.magnitude);
@@ -54,5 +56,15 @@ public class DeepSkyObject extends StellarObject {
 
 	public Optional<DeepSkyTexture> getTexture() {
 		return this.texture;
+	}
+
+	public String getCatalogName() {
+		if(this.catalogId != null && this.catalogId.matches("[mM]\\d+"))
+			return "M " + this.catalogId.substring(1);
+		return this.name;
+	}
+
+	public String getCommonName() {
+		return this.name;
 	}
 }

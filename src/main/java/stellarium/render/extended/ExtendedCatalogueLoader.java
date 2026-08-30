@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,26 +54,27 @@ final class ExtendedCatalogueLoader {
 
 	static CatalogueBuffer loadStars(float magnitudeLimit) throws IOException {
 		BufferBuilderEx builder = VertexReferences.getBuilder();
+		StarQueryBuilder query = new StarQueryBuilder();
 		try {
 			builder.begin(GL11.GL_POINTS, FloatVertexFormats.POSITION_COLOR_MOTION_F);
 			int count = 0;
 
 			for(String path : STAR_CATALOGUES)
-				count += appendStarCatalogue(builder, path, magnitudeLimit);
+				count += appendStarCatalogue(builder, query, path, magnitudeLimit);
 
 			builder.finishDrawing();
 			VertexBufferEx buffer = new VertexBufferEx();
 			buffer.upload(builder);
 			StellarSky.INSTANCE.getLogger().info(
 					"Loaded {} extended stars through magnitude {}", count, magnitudeLimit);
-			return new CatalogueBuffer(buffer, count);
+			return new CatalogueBuffer(buffer, count, query.build());
 		} catch(IOException | RuntimeException exception) {
 			abortBuild(builder);
 			throw exception;
 		}
 	}
 
-	private static int appendStarCatalogue(BufferBuilderEx builder, String path,
+	private static int appendStarCatalogue(BufferBuilderEx builder, StarQueryBuilder query, String path,
 			float magnitudeLimit) throws IOException {
 		InputStream input = ExtendedCatalogueLoader.class.getResourceAsStream(path);
 		if(input == null)
@@ -115,26 +117,29 @@ final class ExtendedCatalogueLoader {
 
 			float bv = data.getShort(offset + 32) / 1000.0f;
 			StarColor color = StarColor.getColor(bv);
-			float brightness = starDisplayBrightness(magnitude);
 			double motionX = data.getInt(offset + 20) / 1000.0 * MAS_TO_RAD;
 			double motionY = data.getInt(offset + 24) / 1000.0 * MAS_TO_RAD;
 			double motionZ = data.getInt(offset + 28) / 1000.0 * MAS_TO_RAD;
 			builder.pos(x / length * RENDER_DEPTH, y / length * RENDER_DEPTH,
 					z / length * RENDER_DEPTH);
-			builder.color(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, brightness);
+			// Preserve apparent magnitude for the shader. Visibility and
+			// point-source adaptation depend on the current field of view.
+			// Encode it into normalized color alpha because the compatibility
+			// color attribute may clamp values outside [0, 1].
+			builder.color(color.r / 255.0f, color.g / 255.0f,
+					color.b / 255.0f, (magnitude + 2.0f) / 16.0f);
 			builder.generic((float) (motionX * RENDER_DEPTH),
 					(float) (motionY * RENDER_DEPTH), (float) (motionZ * RENDER_DEPTH));
 			builder.endVertex();
+			int packedHip = (data.get(offset + 45) & 0xff)
+					| ((data.get(offset + 46) & 0xff) << 8)
+					| ((data.get(offset + 47) & 0xff) << 16);
+			query.add((float) (x / length), (float) (y / length), (float) (z / length),
+					(float) motionX, (float) motionY, (float) motionZ, magnitude,
+					data.getLong(offset), packedHip >>> 5, packedHip & 0x1f);
 			accepted++;
 		}
 		return accepted;
-	}
-
-	private static float starDisplayBrightness(float magnitude) {
-		// Keep the actual logarithmic flux. A brightness floor makes every
-		// faint catalogue star bloom like a bright star in the HDR pass.
-		double flux = Math.pow(10.0, -0.4 * (magnitude + 0.5));
-		return (float) Math.min(4.0, flux);
 	}
 
 	static DeepSkyCatalogue loadDeepSky(float magnitudeLimit) throws IOException {
@@ -145,6 +150,7 @@ final class ExtendedCatalogueLoader {
 
 		Map<String, BufferBuilderEx> builders = new LinkedHashMap<>();
 		Map<String, Integer> counts = new LinkedHashMap<>();
+		DeepSkyQueryBuilder query = new DeepSkyQueryBuilder();
 		try {
 			int count = 0;
 
@@ -187,6 +193,8 @@ final class ExtendedCatalogueLoader {
 						}
 						appendDeepSkyBillboard(builder, ra, dec, positionAngle,
 								type, majorArcMinutes, minorArcMinutes, color, brightness);
+						query.add(deepSkyName(fields), type, ra, dec, magnitude,
+								majorArcMinutes, minorArcMinutes);
 						counts.put(texture, counts.get(texture) + 1);
 						count++;
 					} catch(NumberFormatException ignored) {
@@ -207,7 +215,7 @@ final class ExtendedCatalogueLoader {
 			StellarSky.INSTANCE.getLogger().info(
 					"Loaded {} extended deep-sky objects through magnitude {}",
 					count, magnitudeLimit);
-			return new DeepSkyCatalogue(batches, count);
+			return new DeepSkyCatalogue(batches, count, query.build());
 		} catch(IOException | RuntimeException exception) {
 			for(BufferBuilderEx builder : builders.values())
 				abortBuild(builder);
@@ -223,6 +231,18 @@ final class ExtendedCatalogueLoader {
 		} catch(NumberFormatException ignored) {
 			return fallback;
 		}
+	}
+
+	private static String deepSkyName(String[] fields) {
+		int value = parseInt(fields, 18, 0);
+		if(value > 0) return "M " + value;
+		value = parseInt(fields, 16, 0);
+		if(value > 0) return "NGC " + value;
+		value = parseInt(fields, 17, 0);
+		if(value > 0) return "IC " + value;
+		value = parseInt(fields, 19, 0);
+		if(value > 0) return "Caldwell " + value;
+		return "DSO " + fields[0].trim();
 	}
 
 	private static ResourceLocation textureLocation(String texture) {
@@ -365,12 +385,24 @@ final class ExtendedCatalogueLoader {
 
 	private static float imageBrightness(JsonObject tile) {
 		if(!tile.has("maxBrightness"))
-			return 0.35f;
+			return 0.08f;
 		double surfaceMagnitude = tile.get("maxBrightness").getAsDouble();
 		double luminance = 2.0 * 2025000.0
 				* Math.exp(-0.92103 * (surfaceMagnitude + 12.12331))
 				/ ((1.0 / 60.0) * (1.0 / 60.0));
-		return (float) Math.min(1.0, adaptLuminanceScaled(luminance, 1.0));
+		/*
+		 * StelSkyImageTile feeds the physical surface luminance through
+		 * Stellarium's eye adaptation. A dark-sky adaptation of 0.001 cd/m2
+		 * is the closest fixed equivalent for Minecraft's night sky; using
+		 * 1 cd/m2 (the old port) saturates most bright nebula tiles.
+		 */
+		/*
+		 * StellarSky applies a second HDR exposure pass after this value,
+		 * unlike StelSkyImageTile. Calibrate the already-adapted tile into
+		 * that pass instead of letting photographic fields dominate it.
+		 */
+		return (float) (0.08 * Math.min(0.55,
+				adaptLuminanceScaled(luminance, 0.001)));
 	}
 
 	/**
@@ -561,10 +593,16 @@ final class ExtendedCatalogueLoader {
 	static final class CatalogueBuffer {
 		final VertexBufferEx buffer;
 		final int count;
+		final StarQueryIndex query;
 
 		CatalogueBuffer(VertexBufferEx buffer, int count) {
+			this(buffer, count, null);
+		}
+
+		CatalogueBuffer(VertexBufferEx buffer, int count, StarQueryIndex query) {
 			this.buffer = buffer;
 			this.count = count;
+			this.query = query;
 		}
 
 		void delete() {
@@ -575,15 +613,129 @@ final class ExtendedCatalogueLoader {
 	static final class DeepSkyCatalogue {
 		final List<DeepSkyBatch> batches;
 		final int count;
+		final DeepSkyQueryIndex query;
 
 		DeepSkyCatalogue(List<DeepSkyBatch> batches, int count) {
+			this(batches, count, null);
+		}
+
+		DeepSkyCatalogue(List<DeepSkyBatch> batches, int count, DeepSkyQueryIndex query) {
 			this.batches = batches;
 			this.count = count;
+			this.query = query;
 		}
 
 		void delete() {
 			for(DeepSkyBatch batch : batches)
 				batch.buffer.deleteGlBuffers();
+		}
+	}
+
+	static final class StarQueryIndex {
+		final float[] vectors;
+		final float[] magnitude;
+		final long[] gaiaId;
+		final int[] hipId;
+		final byte[] component;
+
+		StarQueryIndex(float[] vectors, float[] magnitude, long[] gaiaId,
+				int[] hipId, byte[] component) {
+			this.vectors = vectors;
+			this.magnitude = magnitude;
+			this.gaiaId = gaiaId;
+			this.hipId = hipId;
+			this.component = component;
+		}
+
+		int size() { return magnitude.length; }
+	}
+
+	private static final class StarQueryBuilder {
+		private float[] vectors = new float[65536 * 6];
+		private float[] magnitude = new float[65536];
+		private long[] gaiaId = new long[65536];
+		private int[] hipId = new int[65536];
+		private byte[] component = new byte[65536];
+		private int size;
+
+		void add(float x, float y, float z, float motionX, float motionY, float motionZ,
+				float mag, long gaia, int hip, int componentId) {
+			ensure(size + 1);
+			int base = size * 6;
+			vectors[base] = x; vectors[base + 1] = y; vectors[base + 2] = z;
+			vectors[base + 3] = motionX; vectors[base + 4] = motionY; vectors[base + 5] = motionZ;
+			magnitude[size] = mag;
+			gaiaId[size] = gaia;
+			hipId[size] = hip;
+			component[size] = (byte) componentId;
+			size++;
+		}
+
+		private void ensure(int required) {
+			if(required <= magnitude.length) return;
+			int capacity = Math.max(required, magnitude.length + magnitude.length / 2);
+			vectors = Arrays.copyOf(vectors, capacity * 6);
+			magnitude = Arrays.copyOf(magnitude, capacity);
+			gaiaId = Arrays.copyOf(gaiaId, capacity);
+			hipId = Arrays.copyOf(hipId, capacity);
+			component = Arrays.copyOf(component, capacity);
+		}
+
+		StarQueryIndex build() {
+			return new StarQueryIndex(Arrays.copyOf(vectors, size * 6),
+					Arrays.copyOf(magnitude, size), Arrays.copyOf(gaiaId, size),
+					Arrays.copyOf(hipId, size), Arrays.copyOf(component, size));
+		}
+	}
+
+	static final class DeepSkyQueryIndex {
+		final float[] values;
+		final String[] names;
+		final String[] types;
+
+		DeepSkyQueryIndex(float[] values, String[] names, String[] types) {
+			this.values = values;
+			this.names = names;
+			this.types = types;
+		}
+
+		int size() { return names.length; }
+	}
+
+	private static final class DeepSkyQueryBuilder {
+		private float[] values = new float[4096 * 7];
+		private String[] names = new String[4096];
+		private String[] types = new String[4096];
+		private int size;
+
+		void add(String name, String type, double ra, double dec, float magnitude,
+				float majorArcMinutes, float minorArcMinutes) {
+			ensure(size + 1);
+			Vector3 direction = new SpCoord(ra, dec).getVec();
+			int base = size * 7;
+			values[base] = (float) direction.getX();
+			values[base + 1] = (float) direction.getY();
+			values[base + 2] = (float) direction.getZ();
+			values[base + 3] = magnitude;
+			values[base + 4] = validAngularSize(majorArcMinutes) ? majorArcMinutes : 1.0f;
+			values[base + 5] = validAngularSize(minorArcMinutes) ? minorArcMinutes : values[base + 4];
+			values[base + 6] = (float) ra;
+			names[size] = name;
+			types[size] = type;
+			size++;
+		}
+
+		private void ensure(int required) {
+			if(required <= names.length) return;
+			int capacity = Math.max(required, names.length + names.length / 2);
+			values = Arrays.copyOf(values, capacity * 7);
+			names = Arrays.copyOf(names, capacity);
+			types = Arrays.copyOf(types, capacity);
+		}
+
+		DeepSkyQueryIndex build() {
+			return new DeepSkyQueryIndex(Arrays.copyOf(values, size * 7),
+					Arrays.copyOf(names, size), Arrays.copyOf(types, size));
 		}
 	}
 

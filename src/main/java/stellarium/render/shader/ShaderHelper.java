@@ -71,10 +71,6 @@ public class ShaderHelper {
 		//Links the program
 		OpenGlHelper.glLinkProgram(programObject);
 
-		if(GL11.glGetError() != GL11.GL_NO_ERROR)
-			StellarSky.INSTANCE.getLogger().error(
-					"There was an error preparing shaders. Error code: " + GL11.glGetError());
-
 		//Check if link is done correctly
 		if (OpenGlHelper.glGetProgrami(programObject, OpenGlHelper.GL_LINK_STATUS) == GL11.GL_FALSE) {
 			StellarSky.INSTANCE.getLogger().error("Failed to link the shader program");

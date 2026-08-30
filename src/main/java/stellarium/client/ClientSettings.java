@@ -109,7 +109,7 @@ public class ClientSettings extends SimpleHierarchicalConfig {
 		propRenderDeepSkyImages.setComment("Render the original textured Messier objects.");
 		propRenderDisplayOverlays.setComment("Render celestial grids and display overlays.");
 		propRenderLandscape.setComment("Render Stellar Sky landscape silhouettes.");
-		propShowTimeMultiplierHud.setComment("Show the time multiplier text in the upper-left corner.");
+		propShowTimeMultiplierHud.setComment("Show the movable time status overlay.");
 
 		propExtendedStarMagnitudeLimit.setComment("Faintest star loaded by the extended renderer.");
 		propExtendedStarMagnitudeLimit.setMinValue(6.0);

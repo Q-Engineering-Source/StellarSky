@@ -124,6 +124,14 @@ public abstract class SolarObject extends StellarObject {
 		return this.earthPos;
 	}
 
+	/** Apparent geometric angular radius as seen from Earth, in radians. */
+	public double getAngularRadiusRadians() {
+		if(!Double.isFinite(this.radius) || !Double.isFinite(this.earthPos.size())
+				|| this.radius <= 0.0 || this.earthPos.size() <= 0.0)
+			return 0.0;
+		return Math.asin(Math.min(1.0, this.radius / this.earthPos.size()));
+	}
+
 	public abstract Vector3 getRelativePos(double year);
 
 }

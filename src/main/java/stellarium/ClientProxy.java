@@ -27,10 +27,11 @@ import stellarapi.api.world.worldset.WorldSet;
 import stellarium.api.StellarSkyAPI;
 import stellarium.client.ClientSettings;
 import stellarium.client.StellarClientFMLHook;
-import stellarium.client.TimeMultiplierHud;
 import stellarium.client.overlay.StellarSkyOverlays;
 import stellarium.client.overlay.clientcfg.OverlayClientSettingsType;
 import stellarium.client.overlay.clock.OverlayClockType;
+import stellarium.client.overlay.objectinfo.ObjectInfoOverlayType;
+import stellarium.client.overlay.timestatus.TimeStatusOverlayType;
 import stellarium.render.GenericSkyRenderer;
 import stellarium.render.SkyModel;
 import stellarium.render.SkyRenderer;
@@ -71,11 +72,12 @@ public class ClientProxy extends CommonProxy implements IProxy {
 						StellarSkyReferences.GUI_SETTINGS));
 
 		MinecraftForge.EVENT_BUS.register(new StellarClientFMLHook());
-		MinecraftForge.EVENT_BUS.register(new TimeMultiplierHud());
 
 		OverlayRegistry.registerOverlaySet("stellarsky", new StellarSkyOverlays());
 		OverlayRegistry.registerOverlay("clock", new OverlayClockType(), this.guiConfig);
 		OverlayRegistry.registerOverlay("clientconfig", new OverlayClientSettingsType(), this.guiConfig);
+		OverlayRegistry.registerOverlay("time_status", new TimeStatusOverlayType(), this.guiConfig);
+		OverlayRegistry.registerOverlay("object_info", new ObjectInfoOverlayType(), this.guiConfig);
 
 		this.skyModel = new SkyModel(this.celestialManager);
 		skyModel.initializeSettings(this.clientSettings);

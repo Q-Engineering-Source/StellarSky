@@ -9,6 +9,7 @@ import stellarapi.api.optics.Wavelength;
 import stellarium.client.ClientSettings;
 import stellarium.render.stellars.access.ICheckedAtmModel;
 import stellarium.view.ViewerInfo;
+import stellarium.world.AtmosphereGeometry;
 import stellarium.world.StellarScene;
 
 public class AtmosphereModel implements ICheckedAtmModel {
@@ -16,6 +17,7 @@ public class AtmosphereModel implements ICheckedAtmModel {
 	private float outerRadius = 820.0f;
 	private float innerRadius = 800.0f;
 	private float heightOffset = 0.2f, heightIncScale = 1.0f;
+	private StellarScene scene;
 
 	private float height;
 	private float skyred, skygreen, skyblue;
@@ -30,6 +32,7 @@ public class AtmosphereModel implements ICheckedAtmModel {
 	}
 
 	public void dimensionLoad(StellarScene dimManager) {
+		this.scene = dimManager;
 		this.azimuthCheckEnabled = dimManager.getSettings().hideObjectsUnderHorizon();
 		this.leastAzimuthRendered = -90.0f;
 		
@@ -56,10 +59,13 @@ public class AtmosphereModel implements ICheckedAtmModel {
 		this.skyExtGreen = update.sky.getExtinctionRate(Wavelength.V);
 		this.skyExtBlue = update.sky.getExtinctionRate(Wavelength.B);
 
-		this.height = this.heightOffset + update.getHeight(world) * this.heightIncScale;
+		this.height = this.scene == null ? this.heightOffset : (float)
+				AtmosphereGeometry.resolveHeight(world, update.currentPosition.getY(),
+						this.scene.getSettings());
 		
 		if(this.azimuthCheckEnabled)
-			this.leastAzimuthRendered = Math.acos(1.0 / (1.0 + this.height / this.innerRadius));
+			this.leastAzimuthRendered = -AtmosphereGeometry.horizonDepressionDegrees(
+					this.height, this.innerRadius);
 	}
 
 	public double getHeight() {

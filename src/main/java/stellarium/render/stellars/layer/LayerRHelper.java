@@ -102,6 +102,38 @@ public class LayerRHelper {
 		builder.tex(0.0, 0.0).color(red, green, blue, 1.0f).endVertex();
 	}
 
+	public void renderTexturedBillboard(Vector3 direction, double depth,
+			double angularRadius, float minU, float minV, float maxU, float maxV,
+			float red, float green, float blue, float alpha) {
+		double halfSize = Math.tan(angularRadius) * depth;
+		double xScale = halfSize / xAxis.size();
+		double yScale = halfSize / yAxis.size();
+		double centerX = direction.getX() * depth;
+		double centerY = direction.getY() * depth;
+		double centerZ = direction.getZ() * depth;
+
+		builder.pos(
+				centerX + xAxis.getX() * xScale - yAxis.getX() * yScale,
+				centerY + xAxis.getY() * xScale - yAxis.getY() * yScale,
+				centerZ + xAxis.getZ() * xScale - yAxis.getZ() * yScale);
+		builder.tex(maxU, minV).color(red, green, blue, alpha).endVertex();
+		builder.pos(
+				centerX + xAxis.getX() * xScale + yAxis.getX() * yScale,
+				centerY + xAxis.getY() * xScale + yAxis.getY() * yScale,
+				centerZ + xAxis.getZ() * xScale + yAxis.getZ() * yScale);
+		builder.tex(maxU, maxV).color(red, green, blue, alpha).endVertex();
+		builder.pos(
+				centerX - xAxis.getX() * xScale + yAxis.getX() * yScale,
+				centerY - xAxis.getY() * xScale + yAxis.getY() * yScale,
+				centerZ - xAxis.getZ() * xScale + yAxis.getZ() * yScale);
+		builder.tex(minU, maxV).color(red, green, blue, alpha).endVertex();
+		builder.pos(
+				centerX - xAxis.getX() * xScale - yAxis.getX() * yScale,
+				centerY - xAxis.getY() * xScale - yAxis.getY() * yScale,
+				centerZ - xAxis.getZ() * xScale - yAxis.getZ() * yScale);
+		builder.tex(minU, minV).color(red, green, blue, alpha).endVertex();
+	}
+
 	/** Area of a point in (rad)^2 */
 	public double pointArea() {
 		return this.pointArea;

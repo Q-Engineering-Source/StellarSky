@@ -194,11 +194,51 @@ public final class StellarManager extends WorldSavedData {
 		this.markDirty();
 	}
 
+	public int getSystemTimeZoneOffsetMinutes(int dimension) {
+		TimeState state = getTimeState(dimension);
+		return state.hasTimeZoneOverride ? state.timeZoneOffsetMinutes
+				: stellarium.time.StellarSkyTime.getServerTimeOffsetMinutes();
+	}
+
+	public boolean hasTimeZoneOverride(int dimension) {
+		return getTimeState(dimension).hasTimeZoneOverride;
+	}
+
+	public int getConfiguredTimeZoneOffsetMinutes(int dimension) {
+		return getTimeState(dimension).timeZoneOffsetMinutes;
+	}
+
+	public void setTimeZoneOffsetMinutes(int dimension, int offsetMinutes) {
+		TimeState state = getTimeState(dimension);
+		state.hasTimeZoneOverride = true;
+		state.timeZoneOffsetMinutes = Math.max(-14 * 60, Math.min(14 * 60, offsetMinutes));
+		this.markDirty();
+	}
+
+	public void clearTimeZoneOverride(int dimension) {
+		getTimeState(dimension).hasTimeZoneOverride = false;
+		this.markDirty();
+	}
+
 	public void setLocation(int dimension, double latitude, double longitude) {
+		TimeState state = getTimeState(dimension);
+		setLocation(dimension, latitude, longitude,
+				state.hasLocationOverride ? state.altitude : 0.0);
+	}
+
+	public void setLocation(int dimension, double latitude, double longitude, double altitude) {
 		TimeState state = getTimeState(dimension);
 		state.hasLocationOverride = true;
 		state.latitude = Math.max(-90.0, Math.min(90.0, latitude));
 		state.longitude = normalizeLongitude(longitude);
+		state.altitude = altitude;
+		this.markDirty();
+	}
+
+	public void setAltitude(int dimension, double altitude) {
+		TimeState state = getTimeState(dimension);
+		state.hasLocationOverride = true;
+		state.altitude = altitude;
 		this.markDirty();
 	}
 
@@ -248,9 +288,12 @@ public final class StellarManager extends WorldSavedData {
 		private double savedMultiplier;
 		private boolean systemTimeSync;
 		private int systemTimeSyncIntervalSeconds;
+		private boolean hasTimeZoneOverride;
+		private int timeZoneOffsetMinutes;
 		private boolean hasLocationOverride;
 		private double latitude;
 		private double longitude;
+		private double altitude;
 
 		private TimeState(double multiplier, double savedMultiplier, boolean systemTimeSync,
 				int systemTimeSyncIntervalSeconds) {
@@ -258,6 +301,8 @@ public final class StellarManager extends WorldSavedData {
 			this.savedMultiplier = savedMultiplier == 0 ? 1 : clampTimeMultiplier(savedMultiplier);
 			this.systemTimeSync = systemTimeSync;
 			this.systemTimeSyncIntervalSeconds = Math.max(1, Math.min(3600, systemTimeSyncIntervalSeconds));
+			this.hasTimeZoneOverride = false;
+			this.timeZoneOffsetMinutes = 0;
 		}
 
 		private static TimeState read(NBTTagCompound tag, double defaultMultiplier, boolean defaultSystemTimeSync,
@@ -272,6 +317,10 @@ public final class StellarManager extends WorldSavedData {
 			state.hasLocationOverride = tag.getBoolean("LocationOverride");
 			state.latitude = tag.getDouble("Latitude");
 			state.longitude = tag.getDouble("Longitude");
+			state.altitude = tag.hasKey("Altitude", 6) ? tag.getDouble("Altitude") : 0.0;
+			state.hasTimeZoneOverride = tag.getBoolean("TimeZoneOverride");
+			state.timeZoneOffsetMinutes = Math.max(-14 * 60,
+					Math.min(14 * 60, tag.getInteger("TimeZoneOffsetMinutes")));
 			return state;
 		}
 
@@ -281,9 +330,12 @@ public final class StellarManager extends WorldSavedData {
 			tag.setDouble("SavedMultiplier", this.savedMultiplier);
 			tag.setBoolean("SystemTimeSync", this.systemTimeSync);
 			tag.setInteger("SystemTimeSyncInterval", this.systemTimeSyncIntervalSeconds);
+			tag.setBoolean("TimeZoneOverride", this.hasTimeZoneOverride);
+			tag.setInteger("TimeZoneOffsetMinutes", this.timeZoneOffsetMinutes);
 			tag.setBoolean("LocationOverride", this.hasLocationOverride);
 			tag.setDouble("Latitude", this.latitude);
 			tag.setDouble("Longitude", this.longitude);
+			tag.setDouble("Altitude", this.altitude);
 			return tag;
 		}
 
@@ -299,6 +351,14 @@ public final class StellarManager extends WorldSavedData {
 			return this.systemTimeSyncIntervalSeconds;
 		}
 
+		public boolean hasTimeZoneOverride() {
+			return this.hasTimeZoneOverride;
+		}
+
+		public int getTimeZoneOffsetMinutes() {
+			return this.timeZoneOffsetMinutes;
+		}
+
 		public boolean hasLocationOverride() {
 			return this.hasLocationOverride;
 		}
@@ -309,6 +369,10 @@ public final class StellarManager extends WorldSavedData {
 
 		public double getLongitude() {
 			return this.longitude;
+		}
+
+		public double getAltitude() {
+			return this.altitude;
 		}
 	}
 

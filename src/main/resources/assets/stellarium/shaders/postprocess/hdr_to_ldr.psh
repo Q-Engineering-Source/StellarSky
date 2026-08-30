@@ -6,9 +6,12 @@ uniform float brScale;
 vec4 encode(vec4 color)
 {
     vec4 vEncoded;
-    float maxComponent = max(max(color.r, color.g), color.b );
+    vec3 rgb = max(color.rgb, vec3(0.0));
+    float maxComponent = max(max(rgb.r, rgb.g), rgb.b);
+    if (maxComponent <= 1.0e-20)
+        return vec4(0.0, 0.0, 0.0, 128.0 / 255.0);
     float fExp = ceil( log2(maxComponent) );
-    vEncoded = color / exp2(fExp);
+    vEncoded = vec4(rgb / exp2(fExp), 0.0);
     vEncoded.a = (fExp + 128) / 255;
     return vEncoded;
 }

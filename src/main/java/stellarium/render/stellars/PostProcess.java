@@ -11,6 +11,7 @@ import org.lwjgl.opengl.GL30;
 
 import net.minecraft.client.renderer.GlStateManager;
 import stellarapi.api.optics.EyeDetector;
+import stellarapi.api.optics.Wavelength;
 import stellarium.StellarSkyResources;
 import stellarium.render.shader.IShaderObject;
 import stellarium.render.shader.IUniformField;
@@ -93,26 +94,43 @@ public class PostProcess {
 		this.scope = ShaderHelper.getInstance().buildShader("Scope",
 				StellarSkyResources.vertexScope,
 				StellarSkyResources.fragmentScope);
+		requireShader(scope, "Scope");
+		scope.bindShader();
 		scope.getField("texture").setInteger(0);
+		scope.releaseShader();
 		this.fieldBrMult = scope.getField("brightnessMult");
 		this.fieldResDir = scope.getField("resDirection");
 
 		this.skyToQueried = ShaderHelper.getInstance().buildShader("SkyToQueried",
 				StellarSkyResources.vertexSkyToQueried,
 				StellarSkyResources.fragmentSkyToQueried);
+		requireShader(skyToQueried, "SkyToQueried");
+		skyToQueried.bindShader();
 		skyToQueried.getField("texture").setInteger(0);
+		skyToQueried.releaseShader();
 		this.fieldRelative = skyToQueried.getField("relative");
 
 		this.hdrToldr = ShaderHelper.getInstance().buildShader("HDRtoLDR",
 				StellarSkyResources.vertexHDRtoLDR,
 				StellarSkyResources.fragmentHDRtoLDR);
+		requireShader(hdrToldr, "HDRtoLDR");
+		hdrToldr.bindShader();
 		hdrToldr.getField("texture").setInteger(0);
+		hdrToldr.releaseShader();
 		this.fieldBrScale = hdrToldr.getField("brScale");
 
 		this.linearToSRGB = ShaderHelper.getInstance().buildShader("linearToSRGB",
 				StellarSkyResources.vertexLinearToSRGB,
 				StellarSkyResources.fragmentLinearToSRGB);
+		requireShader(linearToSRGB, "linearToSRGB");
+		linearToSRGB.bindShader();
 		linearToSRGB.getField("texture").setInteger(0);
+		linearToSRGB.releaseShader();
+	}
+
+	private static void requireShader(IShaderObject shader, String name) {
+		if(shader == null)
+			throw new IllegalStateException("Unable to initialize post-process shader " + name);
 	}
 
 	public void preProcess() {
@@ -143,7 +161,19 @@ public class PostProcess {
 		frame2.bindFramebuffer(false);
 		frame2.framebufferClear();
 
-		double resolution = Math.toRadians(EyeDetector.DEFAULT_RESOLUTION) / viewer.multiplyingPower;
+		/*
+		 * Detector resolution and atmospheric seeing are independent blur
+		 * sources, so combine them in quadrature. IAtmosphereEffect reports
+		 * angular seeing in degrees; V is the representative luminance band
+		 * for this shared RGB kernel.
+		 */
+		double atmosphericSeeing = viewer.sky.getSeeing(Wavelength.V);
+		if(!Double.isFinite(atmosphericSeeing) || atmosphericSeeing < 0.0)
+			atmosphericSeeing = 0.0;
+		double opticalResolution = Math.hypot(
+				EyeDetector.DEFAULT_RESOLUTION, atmosphericSeeing);
+		double resolution = Math.toRadians(opticalResolution)
+				/ viewer.multiplyingPower;
 
 		scope.bindShader();
 		fieldBrMult.setDouble4(1.0, 1.0, 1.0, 1.0);

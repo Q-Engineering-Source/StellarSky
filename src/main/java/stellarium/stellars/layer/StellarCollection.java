@@ -33,6 +33,10 @@ public class StellarCollection<S extends StellarObject> extends CelestialCollect
 		this.layerModel = layerModel;
 	}
 
+	public StellarLayerModel<S> getRenderModel() {
+		return this.layerModel;
+	}
+
 	public void setManager(StellarManager manager) {
 		this.manager = manager;
 	}
@@ -87,7 +91,12 @@ public class StellarCollection<S extends StellarObject> extends CelestialCollect
 
 	public StellarCollection<S> copyFromClient() {
 		StellarCollection<S> copied = new StellarCollection<>(this.type, this.configName);
-		copied.loadedObjects = HashMultimap.create(copied.loadedObjects);
+		copied.loadedObjects = HashMultimap.create(this.loadedObjects);
+		// Common initialization adds the Sun, Moon, planets and their render
+		// caches after this copy. Keep a model bound to the copied collection so
+		// those caches are retained for the active client world.
+		if(this.layerModel != null)
+			copied.layerModel = this.layerModel.copy(copied);
 		
 		return copied;
 	}

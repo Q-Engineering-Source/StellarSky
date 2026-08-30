@@ -36,6 +36,8 @@ public class PerDimensionSettings extends SimpleHierarchicalNBTConfig {
 	private ConfigPropertyDouble propAtmTotalHeight;
 	private ConfigPropertyDouble propAtmHeightOffset;
 	private ConfigPropertyDouble propAtmHeightIncScale;
+	private ConfigPropertyString propAtmHeightMode;
+	private ConfigPropertyDouble propAtmPhysicalScaleHeight;
 	
 	private ConfigPropertyDoubleList propAtmExtinctionFactor;
 	
@@ -74,6 +76,10 @@ public class PerDimensionSettings extends SimpleHierarchicalNBTConfig {
 		this.propAtmTotalHeight = new ConfigPropertyDouble("Atmosphere_Total_Height", "atmTotalHeight", 20.0 / 800.0);
 		this.propAtmHeightOffset = new ConfigPropertyDouble("Atmosphere_Height_Offset", "atmHeightOffset", 0.2);
 		this.propAtmHeightIncScale = new ConfigPropertyDouble("Atmosphere_Height_Increase_Scale", "atmHeightIncreaseScale", 1.0);
+		this.propAtmHeightMode = new ConfigPropertyString("Atmosphere_Height_Mode",
+				"atmHeightMode", AtmosphereHeightMode.MINECRAFT_Y.getSerializedName());
+		this.propAtmPhysicalScaleHeight = new ConfigPropertyDouble(
+				"Atmosphere_Physical_Scale_Height_Meters", "atmPhysicalScaleHeight", 8000.0);
 
 		this.propAtmExtinctionFactor = new ConfigPropertyDoubleList("Sky_Extinction_Factors", "skyExtinctionFactors", skyType.getSkyExtinctionFactors());
 		
@@ -99,6 +105,8 @@ public class PerDimensionSettings extends SimpleHierarchicalNBTConfig {
        	this.addConfigProperty(this.propAtmTotalHeight);
        	this.addConfigProperty(this.propAtmHeightOffset);
        	this.addConfigProperty(this.propAtmHeightIncScale);
+		this.addConfigProperty(this.propAtmHeightMode);
+		this.addConfigProperty(this.propAtmPhysicalScaleHeight);
        	this.addConfigProperty(this.propAtmExtinctionFactor);
        	this.addConfigProperty(this.propAllowRefraction);
        	this.addConfigProperty(this.propSunlightMultiplier);
@@ -185,6 +193,19 @@ public class PerDimensionSettings extends SimpleHierarchicalNBTConfig {
        	propAtmHeightIncScale.setLanguageKey("config.property.dimension.atmheightincscale");
        	propAtmHeightIncScale.setMinValue(-1.0);
        	propAtmHeightIncScale.setMaxValue(10.0);
+
+		propAtmHeightMode.setComment("Source used for atmospheric camera height. "
+				+ "minecraft_y preserves the original player-Y mapping; observer_altitude "
+				+ "uses the per-player astronomical altitude in meters; fixed uses only "
+				+ "Atmosphere_Height_Offset.");
+		propAtmHeightMode.setRequiresWorldRestart(true);
+		propAtmHeightMode.setValidValues(AtmosphereHeightMode.NAMES);
+
+		propAtmPhysicalScaleHeight.setComment("Physical atmospheric scale height in meters. "
+				+ "Used to convert observer altitude when Atmosphere_Height_Mode is observer_altitude.");
+		propAtmPhysicalScaleHeight.setRequiresWorldRestart(true);
+		propAtmPhysicalScaleHeight.setMinValue(1.0);
+		propAtmPhysicalScaleHeight.setMaxValue(1000000.0);
        	
        	propAtmExtinctionFactor.setComment("Extinction Factor for RVB(or RGB) of the atmosphere,"
        			+ "affects both sky rendering and extinction of stellar objects.");
@@ -324,6 +345,14 @@ public class PerDimensionSettings extends SimpleHierarchicalNBTConfig {
 	
 	public double getHeightIncScale() {
 		return propAtmHeightIncScale.getDouble();
+	}
+
+	public AtmosphereHeightMode getAtmosphereHeightMode() {
+		return AtmosphereHeightMode.fromName(propAtmHeightMode.getString());
+	}
+
+	public double getAtmospherePhysicalScaleHeight() {
+		return propAtmPhysicalScaleHeight.getDouble();
 	}
 	
 	public double[] extinctionRates() {

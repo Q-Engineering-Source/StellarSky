@@ -42,7 +42,9 @@ public class StellarRenderModel {
 		layerModels.clear();
 		for(int i = 0; i < baseModels.size(); i++) {
 			CelestialManager celestialWorld = manager.getCelestialManager();
-			layerModels.add(baseModels.get(i).copy(celestialWorld.getLayers().get(i)));
+			StellarCollection collection = celestialWorld.getLayers().get(i);
+			StellarLayerModel model = collection.getRenderModel();
+			layerModels.add(model != null ? model : baseModels.get(i).copy(collection));
 		}
 	}
 

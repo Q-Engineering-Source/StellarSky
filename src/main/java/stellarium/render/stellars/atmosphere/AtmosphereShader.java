@@ -12,7 +12,6 @@ public class AtmosphereShader {
 	private IUniformField cameraHeight;
 	private IUniformField outerRadius, innerRadius;
 	private IUniformField nSamples;
-	private IUniformField depthToFogFactor;
 	private IUniformField extinctionFactor, gScattering, rayleighFactor, mieFactor;
 
 	private IUniformField cameraHeight2;
@@ -41,8 +40,6 @@ public class AtmosphereShader {
 		this.outerRadius = atmosphere.getField("outerRadius");
 		this.innerRadius = atmosphere.getField("innerRadius");
 		this.nSamples = atmosphere.getField("nSamples");
-
-		this.depthToFogFactor = atmosphere.getField("depthToFogFactor");
 
 		this.extinctionFactor = atmosphere.getField("extinctionFactor");
 		this.gScattering = atmosphere.getField("g");
@@ -99,8 +96,6 @@ public class AtmosphereShader {
 		outerRadius.setDouble(model.getOuterRadius());
 		innerRadius.setDouble(model.getInnerRadius());
 		nSamples.setInteger(10);
-
-		//depthToFogFactor.setDouble(0.1 * Math.exp(-22.5 * this.rainStrengthFactor));
 
 		// Extinction in magnitude
 		Vector3 vec = new Vector3(model.getSkyExtRed(), model.getSkyExtGreen(), model.getSkyExtBlue());

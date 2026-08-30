@@ -12,10 +12,12 @@ public class UtilShaders {
 				"point", StellarSkyResources.vertexPoint, StellarSkyResources.fragmentPoint);		
 		this.texture = ShaderHelper.getInstance().buildShader("texture",
 				StellarSkyResources.vertexTexured, StellarSkyResources.fragmentTextured);
-		texture.getField("texture").setInteger(0);
-
 		if(this.point == null || this.texture == null)
 			throw new RuntimeException("There was an error preparing shader programs");
+
+		texture.bindShader();
+		texture.getField("texture").setInteger(0);
+		texture.releaseShader();
 	}
 
 	public void bindPointShader() {

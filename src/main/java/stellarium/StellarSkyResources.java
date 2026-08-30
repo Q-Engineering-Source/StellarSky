@@ -32,6 +32,12 @@ public class StellarSkyResources {
 	public static final PerWorldResource resourceMoonSurface = 
 			new PerWorldResource("Moon_Surface", new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "stellar/lune.png"));
 
+	/** Vanilla textures reused by the low-power solar-system renderer. */
+	public static final ResourceLocation resourceVanillaSunSurface =
+			new ResourceLocation("textures/environment/sun.png");
+	public static final ResourceLocation resourceVanillaMoonPhases =
+			new ResourceLocation("textures/environment/moon_phases.png");
+
 	public static final PerWorldResource resourceMoonHalo =
 			new PerWorldResource("Moon_Halo", new ResourceLocation(StellarSkyReferences.RESOURCE_ID, "stellar/haloLune.png"));
 
