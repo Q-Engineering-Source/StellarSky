@@ -1,0 +1,4 @@
+# Same-process Cleanroom WorldServer quorum isolation; synthetic full sleepers, no illegal End bed entry.
+id	overworld_full_sleepers	end_full_sleepers	expected_overworld_quorum	expected_end_quorum	classification
+overworld_only	1	0	true	false	LEGACY_CONTRACT
+end_only	0	1	false	true	LEGACY_CONTRACT

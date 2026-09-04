@@ -6,7 +6,9 @@ import java.util.Iterator;
 import java.util.Set;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.client.renderer.RenderGlobal;
+import net.minecraft.client.resources.IReloadableResourceManager;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
@@ -27,6 +29,8 @@ import stellarapi.api.world.worldset.WorldSet;
 import stellarium.api.StellarSkyAPI;
 import stellarium.client.ClientSettings;
 import stellarium.client.StellarClientFMLHook;
+import stellarium.client.ring.RingworldBoardRenderer;
+import stellarium.client.ring.RingworldAtmosphereFog;
 import stellarium.client.overlay.StellarSkyOverlays;
 import stellarium.client.overlay.clientcfg.OverlayClientSettingsType;
 import stellarium.client.overlay.clock.OverlayClockType;
@@ -40,6 +44,8 @@ import stellarium.stellars.StellarManager;
 import stellarium.stellars.layer.CelestialManager;
 import stellarium.view.ViewerInfo;
 import stellarium.world.StellarScene;
+import stellarium.world.ring.RingworldClockClientState;
+import stellarium.world.ring.RingworldClockSession;
 
 public class ClientProxy extends CommonProxy implements IProxy {
 	
@@ -72,6 +78,11 @@ public class ClientProxy extends CommonProxy implements IProxy {
 						StellarSkyReferences.GUI_SETTINGS));
 
 		MinecraftForge.EVENT_BUS.register(new StellarClientFMLHook());
+		MinecraftForge.EVENT_BUS.register(new RingworldAtmosphereFog());
+		Minecraft minecraft = Minecraft.getMinecraft();
+		if (!(minecraft.getResourceManager() instanceof IReloadableResourceManager resources))
+			throw new IllegalStateException("Ringworld rendering requires a reloadable client resource manager");
+		resources.registerReloadListener(manager -> minecraft.addScheduledTask(RingworldBoardRenderer::invalidate));
 
 		OverlayRegistry.registerOverlaySet("stellarsky", new StellarSkyOverlays());
 		OverlayRegistry.registerOverlay("clock", new OverlayClockType(), this.guiConfig);
@@ -177,5 +188,14 @@ public class ClientProxy extends CommonProxy implements IProxy {
 	@Override
 	public void addScheduledTask(Runnable runnable) {
 		Minecraft.getMinecraft().addScheduledTask(runnable);
+	}
+
+	@Override
+	public boolean isCurrentRingworldClockConnection(RingworldClockSession.Ticket ticket) {
+		NetHandlerPlayClient handler = Minecraft.getMinecraft().getConnection();
+		return RingworldClockClientState.isCurrent(ticket) && handler != null
+				&& handler == ticket.handler()
+				&& handler.getNetworkManager() == ticket.connection()
+				&& handler.getNetworkManager().isChannelOpen();
 	}
 }

@@ -20,8 +20,10 @@ public class EqGridCache implements IDisplayCache<EqGridSettings> {
 	
 	private Vector3 baseColor, decColor, RAColor;
 	protected Vector3[][] displayvec = null;
+	protected Vector3[][] rawDisplayvec = null;
 	protected Vector3[][] colorvec = null;
 	protected Vector3[] equator = null;
+	protected Vector3[] rawEquator = null;
 	protected int latn, longn;
 	protected boolean enabled, equatorEnabled, gridEnabled;
 	protected float brightness;
@@ -36,10 +38,13 @@ public class EqGridCache implements IDisplayCache<EqGridSettings> {
 		if(this.enabled) {
 			if(this.gridEnabled) {
 				this.displayvec = Allocator.createAndInitialize(longn, latn+1);
+				this.rawDisplayvec = Allocator.createAndInitialize(longn, latn+1);
 				this.colorvec = Allocator.createAndInitialize(longn, latn+1);
 			}
-			if(this.equatorEnabled)
+			if(this.equatorEnabled) {
 				this.equator = Allocator.createAndInitialize(longn);
+				this.rawEquator = Allocator.createAndInitialize(longn);
+			}
 		}
 		this.brightness = (float) specificSettings.displayAlpha;
 		this.baseColor = new Vector3(specificSettings.displayBaseColor);
@@ -61,6 +66,7 @@ public class EqGridCache implements IDisplayCache<EqGridSettings> {
 				Buf.set(new SpCoord(-longc*360.0/longn, 0.0).getVec());
 				EqtoEc.transform(Buf);
 				info.projectionToGround.transform(Buf);
+				rawEquator[longc].set(Buf).normalize();
 
 				coord = new SpCoord();
 				coord.setWithVec(Buf);
@@ -75,6 +81,7 @@ public class EqGridCache implements IDisplayCache<EqGridSettings> {
 					Buf.set(new SpCoord(-longc*360.0/longn, latc*180.0/latn - 90.0).getVec());
 					EqtoEc.transform(Buf);
 					info.projectionToGround.transform(Buf);
+					rawDisplayvec[longc][latc].set(Buf).normalize();
 
 					coord = new SpCoord();
 					coord.setWithVec(Buf);

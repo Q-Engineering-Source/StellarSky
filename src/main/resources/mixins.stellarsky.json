@@ -4,12 +4,25 @@
   "package": "stellarium.mixin",
   "refmap": "mixins.stellarsky.refmap.json",
   "target": "@env(DEFAULT)",
-  "compatibilityLevel": "JAVA_8",
+  "compatibilityLevel": "JAVA_25",
   "mixins": [
     "MixinWorldServer",
-    "MixinWorldWeather"
+    "MixinWorldInfoRingworldClock",
+    "MixinWorldWeather",
+    "MixinWorldRingLighting",
+    "MixinUndeadRingSunlight",
+    "MixinEndermanRingSunlight",
+    "MixinFleeSunRingLighting",
+    "MixinRestrictSunRingLighting",
+    "MixinDaylightDetectorRingLighting"
   ],
   "client": [
-    "MixinWorldClient"
+    "MixinWorldClient",
+    "MixinEntityRendererRingworldSnapshot",
+    "MixinKirinoRingworldSnapshot",
+    "MixinEntityRendererRingworldBoard",
+    "MixinKirinoRingworldBoard",
+    "MixinWorldRingCombinedLight",
+    "MixinChunkCacheRingLighting"
   ]
 }

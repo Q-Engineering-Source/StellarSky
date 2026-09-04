@@ -16,6 +16,7 @@ import stellarium.common.ServerSettings;
 import stellarium.stellars.StellarManager;
 import stellarium.stellars.layer.CelestialManager;
 import stellarium.world.StellarScene;
+import stellarium.world.ring.RingworldClockSession;
 
 public interface IProxy {
 	
@@ -41,6 +42,7 @@ public interface IProxy {
 	public void updateTick();
 
 	public void addScheduledTask(Runnable runnable);
+	public boolean isCurrentRingworldClockConnection(RingworldClockSession.Ticket ticket);
 	public float getScreenWidth();
 
 	public void setupStellarLoad(StellarManager manager);

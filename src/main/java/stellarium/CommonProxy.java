@@ -18,6 +18,7 @@ import stellarium.common.ServerSettings;
 import stellarium.stellars.StellarManager;
 import stellarium.stellars.layer.CelestialManager;
 import stellarium.world.StellarScene;
+import stellarium.world.ring.RingworldClockSession;
 
 public class CommonProxy implements IProxy {
 
@@ -77,6 +78,11 @@ public class CommonProxy implements IProxy {
 	@Override
 	public void addScheduledTask(Runnable runnable) {
 		FMLCommonHandler.instance().getMinecraftServerInstance().addScheduledTask(runnable);
+	}
+
+	@Override
+	public boolean isCurrentRingworldClockConnection(RingworldClockSession.Ticket ticket) {
+		return false;
 	}
 
 	@Override

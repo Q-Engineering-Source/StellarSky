@@ -21,11 +21,31 @@ configurations {
     runtimeOnly.extendsFrom(modRuntimeOnly)
 }
 
+// Explicit diagnostic task only: never added to the production JAR or assemble.
+def r1LocalLightProbeJar = tasks.register('r1LocalLightProbeJar', Jar) {
+    group = 'verification'
+    description = 'Packages the isolated R1 dedicated-server probe (not a release mod).'
+    dependsOn tasks.named('compileTestJava')
+    archiveBaseName = 'stellarsky-r1-local-light-probe'
+    archiveClassifier = 'dev'
+    destinationDirectory = layout.buildDirectory.dir('diagnostics/r1')
+    from(sourceSets.test.output.classesDirs) {
+        include 'stellarium/world/ring/R1LocalLightProbeMod*.class'
+    }
+    doFirst {
+        if (!sourceSets.test.output.classesDirs.files.any {
+            new File(it, 'stellarium/world/ring/R1LocalLightProbeMod.class').isFile()
+        }) {
+            throw new GradleException('R1 diagnostic probe class is missing; refusing an empty probe JAR.')
+        }
+    }
+}
+
 unimined.minecraft {
     version '1.12.2'
     mappings { mcp('stable', '39-1.12') }
     cleanroom {
-        loader '0.6.1-alpha'
+        loader '0.6.8-alpha'
         runs.all {
             args += ['--username', minecraft_username]
             systemProperty('fml.noSplash', 'true')
@@ -34,6 +54,11 @@ unimined.minecraft {
     }
     defaultRemapJar = false
     remap(tasks.named('jar').get())
+    remap(r1LocalLightProbeJar.get(), 'remapR1LocalLightProbeJar') {
+        archiveBaseName = 'stellarsky-r1-local-light-probe'
+        archiveClassifier = ''
+        destinationDirectory = layout.buildDirectory.dir('diagnostics/r1')
+    }
     mods {
         remap(configurations.modCompileOnly)
         remap(configurations.modRuntimeOnly)
@@ -51,7 +76,7 @@ dependencies {
     compileOnly 'com.cleanroommc:sponge-mixin:0.20.13+mixin.0.8.7'
     compileOnly 'com.cleanroommc:lwjglx:1.0.0'
     modCompileOnly project(':stellarapi')
-    modRuntimeOnly files('../StellarAPI/build/libs/stellarapi-1.12.2-0.5.2.2.jar')
+    modRuntimeOnly files('../StellarAPI/build/libs/stellarapi-1.12.2-0.5.2.3.jar')
     testImplementation 'junit:junit:4.13.2'
     testRuntimeOnly project(':stellarapi')
 }
@@ -75,8 +100,27 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-tasks.named('test') {
+// This fixture installs WorldSets/sky registries whose production API has no
+// reset operation. Keep it in a dedicated JVM rather than leak it to other suites.
+tasks.register('clientSceneCandidateTest', Test) {
+    group = 'verification'
+    description = 'Runs client scene candidate regressions in an isolated test JVM.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    include '**/StellarSceneCandidateTest.class'
+}
+
+tasks.withType(Test).configureEach {
+    dependsOn tasks.named('testClasses')
     dependsOn(':stellarapi:remapJar')
+    // Headless tests run against MCP-named Minecraft. The SRG release JAR is
+    // still built/audited, but must not shadow the sibling's matching MCP output.
+    classpath = files(providers.provider { project(':stellarapi').sourceSets.main.output }) + sourceSets.test.runtimeClasspath
+    systemProperty 'stellarsky.expectedVersion', project.version.toString()
+}
+
+tasks.named('test') {
+    dependsOn tasks.named('clientSceneCandidateTest')
+    exclude '**/StellarSceneCandidateTest.class'
 }
 
 jar {

@@ -1,0 +1,18 @@
+# fixture-schema: m3a2-2a-cadence-v1
+# evidence-class: LEGACY_CONTRACT
+# input columns: id, total_world_time, current_world_time, multiplier, expected_next_world_time, current_weather, expected_next_weather
+# exact comparison: all numeric results in this file are integral and exact
+id	total_world_time	current_world_time	multiplier	expected_next_world_time	current_weather	expected_next_weather
+m3a2-2a-cadence-m1-step	0	100	1.0	101	100	99
+m3a2-2a-cadence-m2-hold	0	100	2.0	100	100	100
+m3a2-2a-cadence-m2-step	1	100	2.0	101	100	99
+m3a2-2a-cadence-m3-hold-0	0	100	3.0	100	100	100
+m3a2-2a-cadence-m3-hold-1	1	100	3.0	100	100	100
+m3a2-2a-cadence-m3-step	2	100	3.0	101	100	99
+m3a2-2a-cadence-pause	500	100	0.0	100	100	100
+m3a2-2a-cadence-reverse	0	100	-1.0	99	100	99
+m3a2-2a-cadence-fast-half	0	100	0.5	102	100	98
+m3a2-2a-cadence-fast-half-weather-floor	0	100	0.5	102	1	0
+m3a2-2a-cadence-fast-reverse-half	0	100	-0.5	98	100	98
+m3a2-2a-cadence-max-boundary	71	100	72.0	101	100	99
+m3a2-2a-cadence-min-boundary	19	100	-20.0	99	100	99

@@ -1,0 +1,4 @@
+# Exact big-endian MessageTimeMultiplierSync wire bytes.
+id	dimension	multiplier	system_sync	offset_minutes	interval_seconds	expected_hex	classification
+negative_reverse	-7	-1.5	true	-480	3600	fffffff9bff800000000000001fffffe2000000e10	LEGACY_WIRE_ABI
+fractional_fast	1	0.5	false	840	1	000000013fe0000000000000000000034800000001	LEGACY_WIRE_ABI

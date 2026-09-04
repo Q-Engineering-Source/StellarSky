@@ -1,0 +1,9 @@
+# Vanilla/Forge public sleep seam values for Cleanroom 0.6.8 / Minecraft 1.12.2.
+id	daytime	surface	distance_x	hostile	precondition	expected	classification
+night_surface_near	false	true	0	false	awake	OK	LEGACY_CONTRACT
+day_surface_near	true	true	0	false	awake	NOT_POSSIBLE_NOW	LEGACY_CONTRACT
+night_non_surface	false	false	0	false	awake	NOT_POSSIBLE_HERE	LEGACY_CONTRACT
+night_too_far	false	true	4	false	awake	TOO_FAR_AWAY	LEGACY_CONTRACT
+night_hostile	false	true	0	true	awake	NOT_SAFE	LEGACY_CONTRACT
+already_sleeping	false	true	0	false	sleeping	OTHER_PROBLEM	LEGACY_CONTRACT
+dead_player	false	true	0	false	dead	OTHER_PROBLEM	LEGACY_CONTRACT

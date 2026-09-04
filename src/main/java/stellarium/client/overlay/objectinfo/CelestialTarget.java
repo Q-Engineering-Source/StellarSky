@@ -11,10 +11,11 @@ final class CelestialTarget {
     final double rightAscension;
     final double declination;
     final Double phase;
+    final boolean moon;
 
     CelestialTarget(String identifier, String englishName, String chineseName,
             String type, double magnitude, double altitude,
-            double azimuth, double rightAscension, double declination, Double phase) {
+            double azimuth, double rightAscension, double declination, Double phase, boolean moon) {
         this.identifier = identifier;
         this.englishName = englishName;
         this.chineseName = chineseName;
@@ -25,5 +26,6 @@ final class CelestialTarget {
         this.rightAscension = rightAscension;
         this.declination = declination;
         this.phase = phase;
+        this.moon = moon;
     }
 }

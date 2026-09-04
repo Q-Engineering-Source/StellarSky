@@ -4,6 +4,7 @@ uniform vec3 lightDir;      // Direction vector to the light source
 uniform float g;			  // Factor g
 uniform vec4 rayleighFactor;
 uniform vec4 mieFactor;
+uniform float atmosphereFade;
 
 varying vec4 scatteringColor4;
 varying vec3 v3Direction;
@@ -36,6 +37,7 @@ void main()
     float fCos2 = fCos * fCos;
 
     gl_FragColor = scatteringColor4 * (getRayleighPhase(fCos2) * rayleighFactor + getMiePhase(fCos, fCos2, g, g*g) * mieFactor);
+    gl_FragColor.rgb *= atmosphereFade;
 
     //vec4 fogColor = linear(gl_Fog.color);
     //float fogFactor = gl_FogFragCoord;

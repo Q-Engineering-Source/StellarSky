@@ -16,6 +16,7 @@ public class SunRenderCache implements IObjRenderCache<Sun, SolarSystemClientSet
 	protected Vector3 appPos = new Vector3();
 	protected float size;
 	protected float spriteRed, spriteGreen, spriteBlue;
+	protected float vacuumSpriteRed, vacuumSpriteGreen, vacuumSpriteBlue;
 	protected int latn, longn;
 
 	protected SpCoord cache = new SpCoord();
@@ -42,13 +43,16 @@ public class SunRenderCache implements IObjRenderCache<Sun, SolarSystemClientSet
 
 		this.size = (float) (object.radius / object.earthPos.size());
 		double relativeFlux = 1.0 / object.earthPos.size2();
-		this.spriteRed = (float) relativeFlux
+		this.vacuumSpriteRed = (float) relativeFlux;
+		this.vacuumSpriteGreen = (float) relativeFlux;
+		this.vacuumSpriteBlue = (float) relativeFlux;
+		this.spriteRed = this.vacuumSpriteRed
 				* CelestialBrightness.atmosphericTransmission(
 						info, appCoord, Wavelength.red);
-		this.spriteGreen = (float) relativeFlux
+		this.spriteGreen = this.vacuumSpriteGreen
 				* CelestialBrightness.atmosphericTransmission(
 						info, appCoord, Wavelength.V);
-		this.spriteBlue = (float) relativeFlux
+		this.spriteBlue = this.vacuumSpriteBlue
 				* CelestialBrightness.atmosphericTransmission(
 						info, appCoord, Wavelength.B);
 		

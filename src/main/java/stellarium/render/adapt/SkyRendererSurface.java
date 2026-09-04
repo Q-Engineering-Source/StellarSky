@@ -21,9 +21,11 @@ import net.minecraftforge.client.IRenderHandler;
 import net.minecraftforge.fml.relauncher.ReflectionHelper;
 import stellarapi.api.render.IAdaptiveRenderer;
 import stellarium.StellarSky;
+import stellarium.client.ring.RingworldRenderSnapshots;
 import stellarium.client.ClientSettings;
 import stellarium.world.AtmosphereGeometry;
 import stellarium.world.StellarScene;
+import stellarium.world.ring.RingworldDisplaySnapshot;
 
 public class SkyRendererSurface extends IAdaptiveRenderer {
 
@@ -109,26 +111,37 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 		GlStateManager.clear(GL11.GL_COLOR_BUFFER_BIT);
 
 		StellarScene dimManager = StellarScene.getScene(world);
+		RingworldDisplaySnapshot snapshot =
+				RingworldRenderSnapshots.currentFor(world, dimManager);
+		double atmosphereFade = snapshot == null ? 1.0 : snapshot.atmosphereFade();
 		ClientSettings settings = StellarSky.PROXY.getClientSettings();
 		if(settings.lowPowerRenderer) {
-			this.renderLowPowerSky(partialTicks, world, mc, dimManager);
+			this.renderLowPowerSky(partialTicks, world, mc, dimManager, snapshot, atmosphereFade);
 			subRenderer.render(partialTicks, world, mc);
 			return;
 		}
 
-		if(dimManager.getSettings().renderPrevSky()) {
+		if(dimManager.getSettings().renderPrevSky() && atmosphereFade > 0.0) {
 			RenderGlobal renderGlobal = mc.renderGlobal;
 			float lat = (float) dimManager.getSettings().latitude;
 
+			net.minecraft.client.renderer.vertex.VertexBuffer sky1 = null;
+			net.minecraft.client.renderer.vertex.VertexBuffer sky2 = null;
+			net.minecraft.client.renderer.vertex.VertexBuffer star = null;
+			int sky1id = -1, sky2id = -1, starid = -1;
+			BufferBuilder buffer = null;
+			IRenderHandler providerRenderer = null;
+			boolean providerSwapped = false;
+			boolean matrixPushed = false;
 			try {
-				net.minecraft.client.renderer.vertex.VertexBuffer sky1 = (net.minecraft.client.renderer.vertex.VertexBuffer)skyVBOField.get(renderGlobal);
-				net.minecraft.client.renderer.vertex.VertexBuffer sky2 = (net.minecraft.client.renderer.vertex.VertexBuffer)sky2VBOField.get(renderGlobal);
-				net.minecraft.client.renderer.vertex.VertexBuffer star = (net.minecraft.client.renderer.vertex.VertexBuffer)starVBOField.get(renderGlobal);
-				int sky1id = (Integer)glSkyListField.get(renderGlobal);
-				int sky2id = (Integer)glSkyList2Field.get(renderGlobal);
-				int starid = (Integer)glStarListField.get(renderGlobal);
+				sky1 = (net.minecraft.client.renderer.vertex.VertexBuffer)skyVBOField.get(renderGlobal);
+				sky2 = (net.minecraft.client.renderer.vertex.VertexBuffer)sky2VBOField.get(renderGlobal);
+				star = (net.minecraft.client.renderer.vertex.VertexBuffer)starVBOField.get(renderGlobal);
+				sky1id = (Integer)glSkyListField.get(renderGlobal);
+				sky2id = (Integer)glSkyList2Field.get(renderGlobal);
+				starid = (Integer)glStarListField.get(renderGlobal);
 
-				BufferBuilder buffer = (BufferBuilder)vertexBufferField.get(Tessellator.getInstance());
+				buffer = (BufferBuilder)vertexBufferField.get(Tessellator.getInstance());
 				
 				skyVBOField.set(renderGlobal, skyVBO);
 				sky2VBOField.set(renderGlobal, sky2VBO);
@@ -140,30 +153,44 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 				vertexBufferField.set(Tessellator.getInstance(), placeholder);
 
 				GlStateManager.pushMatrix();
+				matrixPushed = true;
 				GlStateManager.rotate(lat, 1.0f, 0.0f, 0.0f);
 				if(this.otherRenderer != null)
 					otherRenderer.render(partialTicks, world, mc);
 				else {
-					IRenderHandler renderer = world.provider.getSkyRenderer();
+					providerRenderer = world.provider.getSkyRenderer();
 					world.provider.setSkyRenderer(null);
+					providerSwapped = true;
 					renderGlobal.renderSky(partialTicks, 0);
-					world.provider.setSkyRenderer(renderer);
 				}
-				GlStateManager.popMatrix();
-
-				skyVBOField.set(renderGlobal, sky1);
-				sky2VBOField.set(renderGlobal, sky2);
-				starVBOField.set(renderGlobal, star);
-				glSkyListField.set(renderGlobal, sky1id);
-				glSkyList2Field.set(renderGlobal, sky2id);
-				glStarListField.set(renderGlobal, starid);
-
-				vertexBufferField.set(Tessellator.getInstance(), buffer);
 			} catch (Exception exc) {
 				throw new RuntimeException(exc);
+			} finally {
+				try {
+					if(matrixPushed)
+						GlStateManager.popMatrix();
+					if(providerSwapped)
+						world.provider.setSkyRenderer(providerRenderer);
+					if(sky1 != null)
+						skyVBOField.set(renderGlobal, sky1);
+					if(sky2 != null)
+						sky2VBOField.set(renderGlobal, sky2);
+					if(star != null)
+						starVBOField.set(renderGlobal, star);
+					if(sky1id >= 0)
+						glSkyListField.set(renderGlobal, sky1id);
+					if(sky2id >= 0)
+						glSkyList2Field.set(renderGlobal, sky2id);
+					if(starid >= 0)
+						glStarListField.set(renderGlobal, starid);
+					if(buffer != null)
+						vertexBufferField.set(Tessellator.getInstance(), buffer);
+				} catch (IllegalAccessException exc) {
+					throw new RuntimeException(exc);
+				}
 			}
 
-			this.renderDarkening(partialTicks, world, mc);
+			this.renderDarkening(partialTicks, world, mc, atmosphereFade);
 		}
 
 		subRenderer.render(partialTicks, world, mc);
@@ -175,15 +202,16 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 	 * which is tied to the vanilla fixed world horizon.
 	 */
 	private void renderLowPowerSky(float partialTicks, WorldClient world,
-			Minecraft mc, StellarScene scene) {
+			Minecraft mc, StellarScene scene, RingworldDisplaySnapshot snapshot,
+			double atmosphereFade) {
 		Entity viewer = mc.getRenderViewEntity();
 		if(viewer == null)
 			return;
 
 		Vec3d sky = world.getSkyColor(viewer, partialTicks);
 		Vec3d fog = world.getFogColor(partialTicks);
-		double observerY = viewer.prevPosY
-				+ (viewer.posY - viewer.prevPosY) * partialTicks;
+		double observerY = snapshot == null ? viewer.prevPosY
+				+ (viewer.posY - viewer.prevPosY) * partialTicks : snapshot.observer().y();
 		double apparentHorizon = 0.0;
 		if(scene != null) {
 			double height = AtmosphereGeometry.resolveHeight(world, observerY,
@@ -203,34 +231,35 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 		GlStateManager.disableCull();
 		GlStateManager.depthMask(false);
 		GlStateManager.shadeModel(GL11.GL_SMOOTH);
-
-		Tessellator tessellator = Tessellator.getInstance();
-		BufferBuilder buffer = tessellator.getBuffer();
-		final int longitudeSegments = 64;
-		final int latitudeSegments = 24;
-		final double radius = 100.0;
-		for(int latitude = 0; latitude < latitudeSegments; latitude++) {
-			double altitude0 = -90.0 + 180.0 * latitude / latitudeSegments;
-			double altitude1 = -90.0 + 180.0 * (latitude + 1) / latitudeSegments;
-			float[] color0 = lowPowerSkyColor(altitude0, apparentHorizon, sky, fog);
-			float[] color1 = lowPowerSkyColor(altitude1, apparentHorizon, sky, fog);
-			buffer.begin(GL11.GL_QUAD_STRIP, DefaultVertexFormats.POSITION_COLOR);
-			for(int longitude = 0; longitude <= longitudeSegments; longitude++) {
-				double azimuth = Math.PI * 2.0 * longitude / longitudeSegments;
-				addSkyVertex(buffer, radius, altitude0, azimuth, color0);
-				addSkyVertex(buffer, radius, altitude1, azimuth, color1);
+		try {
+			Tessellator tessellator = Tessellator.getInstance();
+			BufferBuilder buffer = tessellator.getBuffer();
+			final int longitudeSegments = 64;
+			final int latitudeSegments = 24;
+			final double radius = 100.0;
+			for(int latitude = 0; latitude < latitudeSegments; latitude++) {
+				double altitude0 = -90.0 + 180.0 * latitude / latitudeSegments;
+				double altitude1 = -90.0 + 180.0 * (latitude + 1) / latitudeSegments;
+				float[] color0 = lowPowerSkyColor(altitude0, apparentHorizon, sky, fog, atmosphereFade);
+				float[] color1 = lowPowerSkyColor(altitude1, apparentHorizon, sky, fog, atmosphereFade);
+				buffer.begin(GL11.GL_QUAD_STRIP, DefaultVertexFormats.POSITION_COLOR);
+				for(int longitude = 0; longitude <= longitudeSegments; longitude++) {
+					double azimuth = Math.PI * 2.0 * longitude / longitudeSegments;
+					addSkyVertex(buffer, radius, altitude0, azimuth, color0);
+					addSkyVertex(buffer, radius, altitude1, azimuth, color1);
+				}
+				tessellator.draw();
 			}
-			tessellator.draw();
+		} finally {
+			GlStateManager.shadeModel(GL11.GL_FLAT);
+			GlStateManager.depthMask(true);
+			if(cull) GlStateManager.enableCull(); else GlStateManager.disableCull();
+			if(fogEnabled) GlStateManager.enableFog(); else GlStateManager.disableFog();
+			if(alpha) GlStateManager.enableAlpha(); else GlStateManager.disableAlpha();
+			if(blend) GlStateManager.enableBlend(); else GlStateManager.disableBlend();
+			GlStateManager.enableTexture2D();
+			GlStateManager.color(1.0f, 1.0f, 1.0f, 1.0f);
 		}
-
-		GlStateManager.shadeModel(GL11.GL_FLAT);
-		GlStateManager.depthMask(true);
-		if(cull) GlStateManager.enableCull();
-		if(fogEnabled) GlStateManager.enableFog();
-		if(alpha) GlStateManager.enableAlpha();
-		if(blend) GlStateManager.enableBlend();
-		GlStateManager.enableTexture2D();
-		GlStateManager.color(1.0f, 1.0f, 1.0f, 1.0f);
 	}
 
 	private static void addSkyVertex(BufferBuilder buffer, double radius,
@@ -243,7 +272,7 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 	}
 
 	private static float[] lowPowerSkyColor(double altitude, double horizon,
-			Vec3d sky, Vec3d fog) {
+			Vec3d sky, Vec3d fog, double atmosphereFade) {
 		double r, g, b;
 		if(altitude >= horizon) {
 			double blend = smoothstep(horizon, horizon + 22.0, altitude);
@@ -256,8 +285,8 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 			g = mix(fog.y * 0.35, fog.y, blend);
 			b = mix(fog.z * 0.42, fog.z, blend);
 		}
-		return new float[] {(float) clampColor(r), (float) clampColor(g),
-				(float) clampColor(b)};
+		return new float[] {(float) clampColor(r * atmosphereFade), (float) clampColor(g * atmosphereFade),
+				(float) clampColor(b * atmosphereFade)};
 	}
 
 	private static double smoothstep(double edge0, double edge1, double value) {
@@ -321,7 +350,7 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 		}
 	}
 
-	private void renderDarkening(float partialTicks, WorldClient world, Minecraft mc) {
+	private void renderDarkening(float partialTicks, WorldClient world, Minecraft mc, double atmosphereFade) {
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder vertexbuffer = tessellator.getBuffer();
 		float brightness = (float) world.getSunBrightness(partialTicks);
@@ -331,10 +360,12 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 		GlStateManager.enableBlend();
 		GlStateManager.depthMask(false);
 		GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-
-		for (int i = 0; i < 6; ++i)
-		{
-			GlStateManager.pushMatrix();
+		try {
+			float baseAlpha = 0.5f + 0.1f * brightness;
+			float alpha = (float) (1.0 - (1.0 - baseAlpha) * atmosphereFade);
+			for (int i = 0; i < 6; ++i) {
+				GlStateManager.pushMatrix();
+				try {
 
 			if (i == 1)
 				GlStateManager.rotate(90.0F, 1.0F, 0.0F, 0.0F);
@@ -351,19 +382,22 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 			if (i == 5)
 				GlStateManager.rotate(-90.0F, 0.0F, 0.0F, 1.0F);
 
-			vertexbuffer.begin(7, DefaultVertexFormats.POSITION_COLOR);
-			vertexbuffer.pos(-100.0D, -100.0D, -100.0D).color(0.0f, 0.0f, 0.0f, 0.5f + 0.1f * brightness).endVertex();
-			vertexbuffer.pos(-100.0D, -100.0D, 100.0D).color(0.0f, 0.0f, 0.0f, 0.5f + 0.1f * brightness).endVertex();
-			vertexbuffer.pos(100.0D, -100.0D, 100.0D).color(0.0f, 0.0f, 0.0f, 0.5f + 0.1f * brightness).endVertex();
-			vertexbuffer.pos(100.0D, -100.0D, -100.0D).color(0.0f, 0.0f, 0.0f, 0.5f + 0.1f * brightness).endVertex();
+					vertexbuffer.begin(7, DefaultVertexFormats.POSITION_COLOR);
+					vertexbuffer.pos(-100.0D, -100.0D, -100.0D).color(0.0f, 0.0f, 0.0f, alpha).endVertex();
+					vertexbuffer.pos(-100.0D, -100.0D, 100.0D).color(0.0f, 0.0f, 0.0f, alpha).endVertex();
+					vertexbuffer.pos(100.0D, -100.0D, 100.0D).color(0.0f, 0.0f, 0.0f, alpha).endVertex();
+					vertexbuffer.pos(100.0D, -100.0D, -100.0D).color(0.0f, 0.0f, 0.0f, alpha).endVertex();
 
-			tessellator.draw();
-			GlStateManager.popMatrix();
+					tessellator.draw();
+				} finally {
+					GlStateManager.popMatrix();
+				}
 		}
-
-		GlStateManager.enableFog();
-		GlStateManager.enableAlpha();
-		GlStateManager.depthMask(true);
+		} finally {
+			GlStateManager.enableFog();
+			GlStateManager.enableAlpha();
+			GlStateManager.depthMask(true);
+		}
 	}
 
 	private static class BufferBuilderPlaceholder extends BufferBuilder {

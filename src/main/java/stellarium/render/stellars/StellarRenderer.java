@@ -13,6 +13,7 @@ import stellarium.render.stellars.atmosphere.AtmosphereSettings;
 import stellarium.render.stellars.atmosphere.EnumAtmospherePass;
 import stellarium.render.stellars.layer.LayerRHelper;
 import stellarium.render.stellars.phased.StellarPhasedRenderer;
+import stellarium.util.OpenGlUtil;
 
 /**
  * Renderer for various visual effects
@@ -36,7 +37,7 @@ public enum StellarRenderer {
 	}
 
 	public void preRender(ClientSettings settings, StellarRI info) {
-		if(!settings.lowPowerRenderer && settings.renderAtmosphere) {
+		if(!settings.lowPowerRenderer && settings.renderAtmosphere && info.atmosphereFade > 0.0) {
 			AtmosphereSettings atmSettings = (AtmosphereSettings) settings.getSubConfig(AtmosphereSettings.KEY);
 			AtmosphereRenderer.INSTANCE.preRender(atmSettings, info);
 		}
@@ -73,57 +74,57 @@ public enum StellarRenderer {
 			return;
 		}
 
-		if(settings.renderPostProcessing)
-			postProcessor.preProcess();
+		int callerFramebuffer = GlStateManager.glGetInteger(OpenGlUtil.FRAMEBUFFER_BINDING);
+		boolean atmosphereActive = settings.renderAtmosphere && info.atmosphereFade > 0.0;
+		boolean atmospherePrepared = false;
 
-		GlStateManager.shadeModel(GL11.GL_SMOOTH);
-		GlStateManager.blendFunc(GL11.GL_ONE, GL11.GL_ONE);
+		try {
+			if(settings.renderPostProcessing)
+				postProcessor.preProcess();
+			GlStateManager.shadeModel(GL11.GL_SMOOTH);
+			GlStateManager.blendFunc(GL11.GL_ONE, GL11.GL_ONE);
+			// TODO AX Use better value for positions
+			if(atmosphereActive) {
+				AtmosphereRenderer.INSTANCE.render(model.atmModel, EnumAtmospherePass.Prepare, info);
+				atmospherePrepared = true;
+			}
 
-		// TODO AX Use better value for positions
+			ExtendedSkyRenderer.INSTANCE.render(settings, info);
+			StellarPhasedRenderer.INSTANCE.render(model.layersModel, EnumStellarPass.Source, layerInfo);
 
-		// Prepare
-		if(settings.renderAtmosphere)
-			AtmosphereRenderer.INSTANCE.render(model.atmModel, EnumAtmospherePass.Prepare, info);
+			GlStateManager.enableDepth();
+			GlStateManager.depthMask(true);
+			GlStateManager.disableBlend();
+			StellarPhasedRenderer.INSTANCE.render(model.layersModel, EnumStellarPass.Opaque, layerInfo);
 
-		// Render surface
-		ExtendedSkyRenderer.INSTANCE.render(settings, info);
-		StellarPhasedRenderer.INSTANCE.render(model.layersModel, EnumStellarPass.Source, layerInfo);
+			GlStateManager.disableDepth();
+			GlStateManager.depthMask(false);
+			GlStateManager.enableBlend();
+			GlStateManager.blendFunc(GL11.GL_ONE, GL11.GL_ONE);
+			GlStateManager.shadeModel(GL11.GL_FLAT);
 
-		// Setup opaque
-		GlStateManager.enableDepth();
-		GlStateManager.depthMask(true);
-		GlStateManager.disableBlend();
-		// Render opaque
-		StellarPhasedRenderer.INSTANCE.render(model.layersModel, EnumStellarPass.Opaque, layerInfo);
+			if(atmosphereActive) {
+				AtmosphereRenderer.INSTANCE.render(model.atmModel, EnumAtmospherePass.SetupDominateScatter, info);
+				layerInfo.apply(info);
+				StellarPhasedRenderer.INSTANCE.render(model.layersModel, EnumStellarPass.DominateScatter, layerInfo);
+				AtmosphereRenderer.INSTANCE.render(model.atmModel, EnumAtmospherePass.Finalize, info);
+				atmospherePrepared = false;
+			}
 
-		GlStateManager.disableDepth();
-		GlStateManager.depthMask(false);
-		GlStateManager.enableBlend();
-		GlStateManager.blendFunc(GL11.GL_ONE, GL11.GL_ONE);
-
-		GlStateManager.shadeModel(GL11.GL_FLAT);
-
-		// Prepare dominate scatter
-		if(settings.renderAtmosphere) {
-			AtmosphereRenderer.INSTANCE.render(model.atmModel, EnumAtmospherePass.SetupDominateScatter, info);
-			layerInfo.apply(info);
-			// Render dominate scatter
-			StellarPhasedRenderer.INSTANCE.render(model.layersModel, EnumStellarPass.DominateScatter, layerInfo);
+			if(settings.renderPostProcessing)
+				postProcessor.postProcess(info);
+		} finally {
+			try {
+				if(atmospherePrepared)
+					AtmosphereRenderer.INSTANCE.abort();
+			} finally {
+				OpenGlUtil.bindFramebuffer(OpenGlUtil.FRAMEBUFFER_GL, callerFramebuffer);
+				GlStateManager.shadeModel(GL11.GL_FLAT);
+				GlStateManager.depthMask(true);
+				GlStateManager.clear(GL11.GL_DEPTH_BUFFER_BIT);
+				GlStateManager.enableDepth();
+				GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+			}
 		}
-
-		// Finalize
-		if(settings.renderAtmosphere)
-			AtmosphereRenderer.INSTANCE.render(model.atmModel, EnumAtmospherePass.Finalize, info);
-
-		// Post-process
-		if(settings.renderPostProcessing)
-			postProcessor.postProcess(info);
-
-		// State setup
-		GlStateManager.shadeModel(GL11.GL_FLAT);
-		GlStateManager.depthMask(true);
-		GlStateManager.clear(GL11.GL_DEPTH_BUFFER_BIT);
-		GlStateManager.enableDepth();
-		GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 	}
 }

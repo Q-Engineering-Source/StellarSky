@@ -35,6 +35,9 @@ public enum AtmosphereRenderer {
 	private FramebufferCustom stellar = null;
 	private int prevWidth = 0, prevHeight = 0;
 	private int prevFramebufferBound = -1;
+	private boolean renderPrepared;
+	private boolean framebufferCaptured;
+	private int previousMatrixMode;
 
 	private boolean vboEnabled;
 
@@ -119,40 +122,49 @@ public enum AtmosphereRenderer {
 	public void render(AtmosphereModel model, EnumAtmospherePass pass, StellarRI info) {
 		switch(pass) {
 		case Prepare:
+			if(this.renderPrepared || this.framebufferCaptured)
+				throw new IllegalStateException("Atmosphere pass is already prepared");
 			this.prevFramebufferBound = GlStateManager.glGetInteger(OpenGlUtil.FRAMEBUFFER_BINDING);
-
-			stellar.bindFramebuffer(false);
-			GlStateManager.depthMask(true);
-			stellar.framebufferClear();
-			GlStateManager.depthMask(false);
-
-			GlStateManager.pushMatrix();
-
-			// Pitch up to adjust the frustrum in favor of refraction
-			double ref = this.getBoundaryRefraction(info);
-			Entity viewer = info.minecraft.getRenderViewEntity();
-			GlStateManager.rotate(270.0f - viewer.rotationYaw, 0.0f, 0.0f, 1.0f);
-			GlStateManager.rotate((float)ref, 0.0f, 1.0f, 0.0f);
-			GlStateManager.rotate(-(270.0f - viewer.rotationYaw), 0.0f, 0.0f, 1.0f);
+			this.previousMatrixMode = GlStateManager.glGetInteger(GL11.GL_MATRIX_MODE);
+			this.framebufferCaptured = true;
+			boolean prepared = false;
+			try {
+				stellar.bindFramebuffer(false);
+				GlStateManager.depthMask(true);
+				stellar.framebufferClear();
+				GlStateManager.depthMask(false);
+				GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+				GlStateManager.pushMatrix();
+				this.renderPrepared = true;
+				double ref = this.getBoundaryRefraction(info) * info.atmosphereFade;
+				Entity viewer = info.minecraft.getRenderViewEntity();
+				GlStateManager.rotate(270.0f - viewer.rotationYaw, 0.0f, 0.0f, 1.0f);
+				GlStateManager.rotate((float)ref, 0.0f, 1.0f, 0.0f);
+				GlStateManager.rotate(-(270.0f - viewer.rotationYaw), 0.0f, 0.0f, 1.0f);
+				prepared = true;
+			} finally {
+				if(!prepared) abort();
+			}
 			break;
 
 		case Finalize:
-			GlStateManager.popMatrix();
-
-			OpenGlUtil.bindFramebuffer(OpenGlUtil.FRAMEBUFFER_GL, this.prevFramebufferBound);
+			restoreTargets();
 
 			// TODO AA Do this with UVs computed on CPU side & Fix glitch from refraction
 			// Apply refraction & Convert to RGBM (Rendering ends here, postprocessing all the way down)
-			IShaderObject refractor = atmShader.bindRefractionShader(model);
+			try {
+			IShaderObject refractor = atmShader.bindRefractionShader(model, info);
 			refractor.getField("pitch").setDouble(Math.toRadians(-info.minecraft.player.rotationPitch));
-			refractor.getField("preRotated").setDouble(Math.toRadians(this.getBoundaryRefraction(info)));
+			refractor.getField("preRotated").setDouble(Math.toRadians(this.getBoundaryRefraction(info) * info.atmosphereFade));
 			GlStateManager.color(1.0f, 1.0f, 1.0f, 1.0f);
 			stellar.bindFramebufferTexture();
 			if(this.vboEnabled)
 				this.renderScrPart(this.scrPartBuffer);
 			else GlStateManager.callList(this.scrPartList);
 
-			ShaderHelper.getInstance().releaseCurrentShader();
+			} finally {
+				ShaderHelper.getInstance().releaseCurrentShader();
+			}
 
 			break;
 
@@ -161,7 +173,7 @@ public enum AtmosphereRenderer {
 
 			// Extinction first - strangely, this drains performance
 			GlStateManager.blendFunc(GL11.GL_ZERO, GL11.GL_SRC_COLOR);
-			atmShader.bindExtinctionShader(model);
+			atmShader.bindExtinctionShader(model, info);
 			// MAYBE Faster evaluation of extinction
 			if(this.vboEnabled)
 				sphereBuffer.drawElements(EnumIndexType.INT, this.sphereIndicesBuffer);
@@ -169,7 +181,7 @@ public enum AtmosphereRenderer {
 			GlStateManager.blendFunc(GL11.GL_ONE, GL11.GL_ONE);
 
 			// Prepare for dominate rendering
-			IShaderObject shader = atmShader.bindAtmShader(model);
+			IShaderObject shader = atmShader.bindAtmShader(model, info);
 			info.setDominateRenderer((lightDir, red, green, blue) -> {
 				if(shader != null) { // Dummy check for debug
 					shader.getField("lightDir").setDouble3(
@@ -185,6 +197,33 @@ public enum AtmosphereRenderer {
 			break;
 		default:
 			break;
+		}
+	}
+
+	/** Restores the framebuffer and model-view stack owned by an incomplete atmosphere pass. */
+	public void abort() {
+		if(!this.renderPrepared && !this.framebufferCaptured)
+			return;
+		try {
+			ShaderHelper.getInstance().releaseCurrentShader();
+		} finally {
+			restoreTargets();
+		}
+	}
+
+	private void restoreTargets() {
+		try {
+			if(this.renderPrepared) {
+				this.renderPrepared = false;
+				GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+				GlStateManager.popMatrix();
+			}
+		} finally {
+			GlStateManager.matrixMode(this.previousMatrixMode);
+			if(this.framebufferCaptured) {
+				this.framebufferCaptured = false;
+				OpenGlUtil.bindFramebuffer(OpenGlUtil.FRAMEBUFFER_GL, this.prevFramebufferBound);
+			}
 		}
 	}
 
@@ -235,19 +274,25 @@ public enum AtmosphereRenderer {
 
 
 	private void renderScrPart(IVertexBuffer buffer) {
+		int matrixMode = GlStateManager.glGetInteger(GL11.GL_MATRIX_MODE);
 		GlStateManager.matrixMode(GL11.GL_PROJECTION);
 		GlStateManager.pushMatrix();
-		GlStateManager.loadIdentity();
-		GlStateManager.matrixMode(GL11.GL_MODELVIEW);
-		GlStateManager.pushMatrix();
-		GlStateManager.loadIdentity();
-
-		buffer.drawElements(EnumIndexType.INT, this.scrPartIndicesBuffer);
-
-		GlStateManager.matrixMode(GL11.GL_PROJECTION);
-		GlStateManager.popMatrix();
-		GlStateManager.matrixMode(GL11.GL_MODELVIEW);
-		GlStateManager.popMatrix();
+		try {
+			GlStateManager.loadIdentity();
+			GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+			GlStateManager.pushMatrix();
+			try {
+				GlStateManager.loadIdentity();
+				buffer.drawElements(EnumIndexType.INT, this.scrPartIndicesBuffer);
+			} finally {
+				GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+				GlStateManager.popMatrix();
+			}
+		} finally {
+			GlStateManager.matrixMode(GL11.GL_PROJECTION);
+			GlStateManager.popMatrix();
+			GlStateManager.matrixMode(matrixMode);
+		}
 	}
 
 	private void setupScrPartIndices(int fragScreen) {

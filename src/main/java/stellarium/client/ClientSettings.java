@@ -14,6 +14,7 @@ public class ClientSettings extends SimpleHierarchicalConfig {
 	public boolean renderPostProcessing;
 	public boolean renderBrightStars;
 	public boolean renderSolarSystem;
+	public boolean renderMoon = true;
 	public boolean renderMilkyWay;
 	public boolean renderDeepSky;
 	public boolean renderDeepSkyCatalog;
@@ -29,7 +30,7 @@ public class ClientSettings extends SimpleHierarchicalConfig {
 	private ConfigPropertyDouble propMagLimit;
 	private ConfigPropertyBoolean propExtendedRenderer, propLowPowerRenderer;
 	private ConfigPropertyBoolean propRenderAtmosphere, propRenderPostProcessing, propRenderBrightStars,
-			propRenderSolarSystem, propRenderMilkyWay, propRenderDeepSky, propRenderDeepSkyCatalog,
+			propRenderSolarSystem, propRenderMoon, propRenderMilkyWay, propRenderDeepSky, propRenderDeepSkyCatalog,
 			propRenderDeepSkyImages, propRenderDisplayOverlays, propRenderLandscape,
 			propShowTimeMultiplierHud;
 	private ConfigPropertyDouble propExtendedStarMagnitudeLimit, propExtendedStarBrightness,
@@ -45,6 +46,7 @@ public class ClientSettings extends SimpleHierarchicalConfig {
 		this.propRenderPostProcessing = new ConfigPropertyBoolean("Render_Post_Processing", "", true);
 		this.propRenderBrightStars = new ConfigPropertyBoolean("Render_Bright_Stars", "", true);
 		this.propRenderSolarSystem = new ConfigPropertyBoolean("Render_Solar_System", "", true);
+		this.propRenderMoon = new ConfigPropertyBoolean("Render_Moon", "", true);
 		this.propRenderMilkyWay = new ConfigPropertyBoolean("Render_Milky_Way", "", true);
 		this.propRenderDeepSky = new ConfigPropertyBoolean("Render_Deep_Sky", "", true);
 		this.propRenderDeepSkyCatalog = new ConfigPropertyBoolean("Render_Deep_Sky_Catalog", "", true);
@@ -68,6 +70,7 @@ public class ClientSettings extends SimpleHierarchicalConfig {
 		this.addConfigProperty(this.propRenderPostProcessing);
 		this.addConfigProperty(this.propRenderBrightStars);
 		this.addConfigProperty(this.propRenderSolarSystem);
+		this.addConfigProperty(this.propRenderMoon);
 		this.addConfigProperty(this.propRenderMilkyWay);
 		this.addConfigProperty(this.propRenderDeepSky);
 		this.addConfigProperty(this.propRenderDeepSkyCatalog);
@@ -103,6 +106,7 @@ public class ClientSettings extends SimpleHierarchicalConfig {
 		propRenderPostProcessing.setComment("Render stellar post-processing effects.");
 		propRenderBrightStars.setComment("Render the active mode's star layer.");
 		propRenderSolarSystem.setComment("Render the sun, moon, and solar-system objects.");
+		propRenderMoon.setComment("Render the moon and make it available for celestial object information.");
 		propRenderMilkyWay.setComment("Render the active mode's Milky Way layer.");
 		propRenderDeepSky.setComment("Master switch for deep-sky rendering.");
 		propRenderDeepSkyCatalog.setComment("Render the extended catalogue of galaxies, nebulae, and clusters.");
@@ -137,6 +141,7 @@ public class ClientSettings extends SimpleHierarchicalConfig {
 		this.renderPostProcessing = propRenderPostProcessing.getBoolean();
 		this.renderBrightStars = propRenderBrightStars.getBoolean();
 		this.renderSolarSystem = propRenderSolarSystem.getBoolean();
+		this.renderMoon = propRenderMoon.getBoolean();
 		this.renderMilkyWay = propRenderMilkyWay.getBoolean();
 		this.renderDeepSky = propRenderDeepSky.getBoolean();
 		this.renderDeepSkyCatalog = propRenderDeepSkyCatalog.getBoolean();

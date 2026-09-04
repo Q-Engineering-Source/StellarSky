@@ -11,9 +11,11 @@ import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
 import net.minecraftforge.fml.relauncher.Side;
 import stellarium.api.observer.ObserverSkyContext;
 import stellarium.api.observer.ObserverSkyResolvers;
+import stellarium.StellarSky;
 import stellarium.stellars.StellarManager;
 import stellarium.time.StellarSkyTime;
 import stellarium.world.StellarScene;
+import stellarium.world.ring.RingworldClockSample;
 
 public final class StellarNetworkManager {
 	
@@ -30,6 +32,8 @@ public final class StellarNetworkManager {
 				MessageTimeMultiplierSync.class, 1, Side.CLIENT);
 		wrapper.registerMessage(MessageObserverSkySync.Handler.class,
 				MessageObserverSkySync.class, 2, Side.CLIENT);
+		wrapper.registerMessage(MessageRingworldClockSync.Handler.class,
+				MessageRingworldClockSync.class, 3, Side.CLIENT);
 	}
 
 	public String getID() {
@@ -69,8 +73,13 @@ public final class StellarNetworkManager {
 	}
 
 	public void sendObserverContext(EntityPlayerMP player, StellarManager manager, boolean force) {
-		ObserverSkyContext context = ObserverSkyResolvers.resolve(player.world, player,
-				getDimensionDefaultContext(player.world, manager));
+		sendObserverContext(player, player.world, manager, force);
+	}
+
+	public void sendObserverContext(EntityPlayerMP player, World contextWorld,
+			StellarManager manager, boolean force) {
+		ObserverSkyContext context = ObserverSkyResolvers.resolve(contextWorld, player,
+				getDimensionDefaultContext(contextWorld, manager));
 		UUID playerId = player.getUniqueID();
 		ObserverSkyContext previous = this.lastObserverContexts.get(playerId);
 		if(force || !context.equals(previous)) {
@@ -89,6 +98,27 @@ public final class StellarNetworkManager {
 
 	public void forgetObserver(EntityPlayerMP player) {
 		this.lastObserverContexts.remove(player.getUniqueID());
+	}
+
+	public void sendRingworldClock(World world, StellarScene scene, RingworldClockSample sample) {
+		if (world.isRemote || StellarScene.getScene(world) != scene
+				|| world.provider.getDimension() != sample.dimension()) {
+			return;
+		}
+		boolean sent = false;
+		for (EntityPlayerMP player : world.getMinecraftServer().getPlayerList().getPlayers()) {
+			if (player.world == world) {
+				wrapper.sendTo(new MessageRingworldClockSync(sample), player);
+				sent = true;
+			}
+		}
+		if (sent && sample.sequence() == 1L && StellarSky.INSTANCE.getLogger().isDebugEnabled()) {
+			StellarSky.INSTANCE.getLogger().debug("Published ringworld clock dimension={} generation={} sequence={} worldTime={} discontinuousBefore={}",
+					sample.dimension(), sample.generation(), sample.sequence(), sample.worldTime(), sample.discontinuousBefore());
+		} else if (sent && StellarSky.INSTANCE.getLogger().isTraceEnabled()) {
+			StellarSky.INSTANCE.getLogger().trace("Published ringworld clock dimension={} generation={} sequence={} worldTime={} discontinuousBefore={}",
+					sample.dimension(), sample.generation(), sample.sequence(), sample.worldTime(), sample.discontinuousBefore());
+		}
 	}
 
 	private static ObserverSkyContext getDimensionDefaultContext(World world, StellarManager manager) {

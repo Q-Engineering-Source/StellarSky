@@ -11,6 +11,7 @@ import stellarapi.api.CelestialPeriod;
 import stellarium.StellarSky;
 import stellarium.common.ServerSettings;
 import stellarium.stellars.layer.CelestialManager;
+import stellarium.stellars.layer.StellarCollection;
 
 public final class StellarManager extends WorldSavedData {
 	// TODO Remove most of StellarManager with configuration. Or, what's day length?
@@ -20,9 +21,15 @@ public final class StellarManager extends WorldSavedData {
 	private CelestialManager celestialManager;
 	private boolean locked = false, setup = false;
 	private final Map<Integer, TimeState> timeStates = new HashMap<>();
+	private final StellarManager clientCandidateSource;
 	
 	public StellarManager(String id) {
+		this(id, null);
+	}
+
+	private StellarManager(String id, StellarManager clientCandidateSource) {
 		super(id);
+		this.clientCandidateSource = clientCandidateSource;
 	}
 
 	public static @Nonnull StellarManager loadOrCreateManager(World world) {		
@@ -124,6 +131,62 @@ public final class StellarManager extends WorldSavedData {
 
 	public ServerSettings getSettings() {
 		return this.settings;
+	}
+
+	/** Scene-local metadata; never registered in the world's MapStorage. */
+	public StellarManager createClientCandidate() {
+		StellarManager candidate = new StellarManager(ID + "-client-candidate", this);
+		candidate.syncFromNBT(this.serializeNBT(), true);
+		return candidate;
+	}
+
+	/**
+	 * Installs state after scene commit, without invoking display callbacks. The
+	 * scene must switch its authority to this manager before binding client models.
+	 */
+	public void adoptPreparedClientState(World world, StellarManager candidate, CelestialManager prepared) {
+		requirePreparedClientGraph(world, prepared);
+		if (candidate == null || candidate.clientCandidateSource != this) {
+			throw new IllegalArgumentException("Client metadata candidate belongs to another manager");
+		}
+		for (StellarCollection collection : prepared.getLayers()) {
+			if (collection.getManager() != candidate) {
+				throw new IllegalArgumentException("Prepared graph belongs to another client metadata candidate");
+			}
+		}
+		// Decode the complete snapshot before touching committed metadata. Keep the
+		// saved-data identity and its dirty bit; client adoption is not a server save.
+		StellarManager snapshot = new StellarManager(ID + "-client-adoption");
+		snapshot.syncFromNBT(candidate.serializeNBT(), true);
+		this.settings = snapshot.settings;
+		this.locked = snapshot.locked;
+		this.timeStates.clear();
+		this.timeStates.putAll(snapshot.timeStates);
+		this.installPreparedClientGraph(prepared);
+	}
+
+	/** Installs a prepared, committed client scene graph; never repeats common initialization. */
+	public void adoptPreparedClientGraph(World world, CelestialManager prepared) {
+		requirePreparedClientGraph(world, prepared);
+		this.installPreparedClientGraph(prepared);
+		StellarSky.PROXY.setupStellarLoad(this);
+	}
+
+	private void installPreparedClientGraph(CelestialManager prepared) {
+		// Preparation used detached metadata. No published collection may retain
+		// that candidate as an alternative mutable authority after commit.
+		for (StellarCollection collection : prepared.getLayers()) {
+			collection.setManager(this);
+		}
+		this.celestialManager = prepared;
+		this.setup = true;
+	}
+
+	private void requirePreparedClientGraph(World world, CelestialManager prepared) {
+		if (!world.isRemote || StellarManager.getManager(world) != this
+				|| prepared == null || !prepared.commonInitialized()) {
+			throw new IllegalStateException("A prepared client graph must belong to its active world manager");
+		}
 	}
 
 	public CelestialManager getCelestialManager() {

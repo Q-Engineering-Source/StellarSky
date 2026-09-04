@@ -1,0 +1,22 @@
+# M3A-2E exact legacy golden. Numeric rows are consumed by LegacyGameplayHelperGoldenTest.
+id	expected	classification
+sun_angle_t0	0.75	LEGACY_CONTRACT
+sun_angle_t6000	0.0	LEGACY_CONTRACT
+sky_transmission	0.75	LEGACY_CONTRACT
+sunrise_sunset_factor	0.6	LEGACY_CONTRACT
+dispersion_factor	0.8	LEGACY_CONTRACT
+light_pollution_factor	0.1	LEGACY_CONTRACT
+minimum_sky_render_brightness	0.2	LEGACY_CONTRACT
+moon_phase_t0	5	LEGACY_CONTRACT
+moon_phase_t8000	6	LEGACY_CONTRACT
+moon_phase_factor	0.28	LEGACY_CONTRACT
+fallback_angle_t0	0.125	LEGACY_CONTRACT
+descriptor_MIDNIGHT	0	LEGACY_CONTRACT
+descriptor_MIDDAY	12000	LEGACY_CONTRACT
+descriptor_EARLY_MORNING	7200	LEGACY_CONTRACT
+descriptor_MORNING	4800	LEGACY_CONTRACT
+descriptor_AFTERNOON	19200	LEGACY_CONTRACT
+descriptor_EVENING	16800	LEGACY_CONTRACT
+descriptor_DAWN	6000	LEGACY_CONTRACT
+descriptor_DUSK	18000	LEGACY_CONTRACT
+direct_afternoon_fallthrough	16800	UNREACHABLE_THROUGH_DAYTIME_CHECKER

@@ -22,6 +22,7 @@ public class LayerRHelper {
 	public final Minecraft minecraft;
 	public final WorldClient world;
 	public final float partialTicks;
+	public final double atmosphereFade;
 
 	public final BufferBuilderEx builder;
 	public final VertexDirect renderer;
@@ -37,6 +38,7 @@ public class LayerRHelper {
 		this.minecraft = info.minecraft;
 		this.world = info.world;
 		this.partialTicks = info.partialTicks;
+		this.atmosphereFade = info.atmosphereFade;
 
 		this.builder = VertexReferences.getBuilder();
 		this.renderer = VertexReferences.getRenderer();

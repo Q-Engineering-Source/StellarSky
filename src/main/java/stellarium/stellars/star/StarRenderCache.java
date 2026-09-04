@@ -18,6 +18,7 @@ public class StarRenderCache implements IObjRenderCache<BgStar, IConfigHandler> 
 	protected SpCoord appPos = new SpCoord();
 	protected Vector3 pos = new Vector3();
 	protected float red, green, blue;
+	protected float intrinsicRed, intrinsicGreen, intrinsicBlue;
 	protected Vector3 ref = new Vector3();
 
 	@Override
@@ -37,10 +38,13 @@ public class StarRenderCache implements IObjRenderCache<BgStar, IConfigHandler> 
 		double sinAltitude = length > 0.0 ? this.ref.getZ() / length : 1.0;
 		float twinkle = info.sky.getSeeing(Wavelength.V) > 0.0
 				? OpticsHelper.twinkleBrightness(sinAltitude) : 1.0f;
-		double alpha = OpticsHelper.getBrightnessFromMag(object.mag) * twinkle;
-		this.red = (float) (alpha * starColor.r / 255.0);
-		this.green = (float) (alpha * starColor.g / 255.0);
-		this.blue = (float) (alpha * starColor.b / 255.0);
+		double intrinsicAlpha = OpticsHelper.getBrightnessFromMag(object.mag);
+		this.intrinsicRed = (float) (intrinsicAlpha * starColor.r / 255.0);
+		this.intrinsicGreen = (float) (intrinsicAlpha * starColor.g / 255.0);
+		this.intrinsicBlue = (float) (intrinsicAlpha * starColor.b / 255.0);
+		this.red = (float) (intrinsicAlpha * twinkle * starColor.r / 255.0);
+		this.green = (float) (intrinsicAlpha * twinkle * starColor.g / 255.0);
+		this.blue = (float) (intrinsicAlpha * twinkle * starColor.b / 255.0);
 	}
 
 	@SideOnly(Side.CLIENT)

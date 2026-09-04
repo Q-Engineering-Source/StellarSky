@@ -17,6 +17,7 @@ import stellarium.client.SkyRendererMode;
 import stellarium.client.overlay.objectinfo.CelestialNameCatalog;
 import stellarium.render.shader.IShaderObject;
 import stellarium.render.shader.ShaderHelper;
+import stellarium.render.stellars.AtmosphericAppearance;
 import stellarium.render.stellars.StellarRI;
 import stellarium.stellars.OpticsHelper;
 import stellarium.time.StellarSkyTime;
@@ -340,9 +341,11 @@ public enum ExtendedSkyRenderer {
 			double visibleMagnitude = Math.min(settings.extendedStarMagnitudeLimit,
 					7.0 + 2.5 * Math.log10(fieldOfViewScale));
 			starShader.getField("magnitudeLimit").setDouble(visibleMagnitude);
+			double twinkleAmount = info.info.sky.getSeeing(Wavelength.V) > 0.0
+					? OpticsHelper.twinkleAmount() : 0.0;
 			starShader.getField("twinkleAmount").setDouble(
-					info.info.sky.getSeeing(Wavelength.V) > 0.0
-							? OpticsHelper.twinkleAmount() : 0.0);
+					AtmosphericAppearance.scaleAtmosphericEffect(twinkleAmount,
+							info.atmosphereFade));
 			double animationTime = info.minecraft.getRenderViewEntity() == null ? 0.0
 					: (info.minecraft.getRenderViewEntity().ticksExisted
 							+ info.partialTicks) / 20.0;

@@ -19,6 +19,7 @@ public class AtmosphereShader {
 	private IUniformField extinctionFactor2, weatherAlpha;
 
 	private IUniformField fieldRelative;
+	private IUniformField atmosphereFade, extinctionFade, refractionFade;
 
 	private float atmWeatherScatterFactor, atmWeatherExtFactor, atmWeatherAlpha;
 	private double relativeWidth, relativeHeight;
@@ -55,6 +56,10 @@ public class AtmosphereShader {
 
 
 		this.fieldRelative = refraction.getField("relative");
+		ShaderHelper helper = ShaderHelper.getInstance();
+		this.atmosphereFade = helper.requireField(atmosphere, "atmosphereFade");
+		this.extinctionFade = helper.requireField(extinction, "atmosphereFade");
+		this.refractionFade = helper.requireField(refraction, "atmosphereFade");
 	}
 
 	public void updateWorldInfo(StellarRI info) {		
@@ -68,10 +73,10 @@ public class AtmosphereShader {
 		this.relativeHeight = info.relativeHeight;
 	}
 
-	public void bindExtinctionShader(AtmosphereModel model) {
+	public void bindExtinctionShader(AtmosphereModel model, StellarRI info) {
 		extinction.bindShader();
 
-		cameraHeight2.setDouble(model.getHeight());
+		cameraHeight2.setDouble(resolveHeight(model, info));
 		outerRadius2.setDouble(model.getOuterRadius());
 		innerRadius2.setDouble(model.getInnerRadius());
 
@@ -81,18 +86,20 @@ public class AtmosphereShader {
 		extinctionFactor2.setVector3(vec.scale(Math.log(10) * 0.4 - Math.log(this.atmWeatherExtFactor)));
 
 		weatherAlpha.setDouble(this.atmWeatherAlpha);
+		extinctionFade.setDouble(info.atmosphereFade);
 	}
 
-	public IShaderObject bindRefractionShader(AtmosphereModel model) {
+	public IShaderObject bindRefractionShader(AtmosphereModel model, StellarRI info) {
 		refraction.bindShader();
 		fieldRelative.setDouble3(this.relativeWidth, this.relativeHeight, 1.0);
+		refractionFade.setDouble(info.atmosphereFade);
 		return this.refraction;
 	}
 
-	public IShaderObject bindAtmShader(AtmosphereModel model) {
+	public IShaderObject bindAtmShader(AtmosphereModel model, StellarRI info) {
 		atmosphere.bindShader();
 
-		cameraHeight.setDouble(model.getHeight());
+		cameraHeight.setDouble(resolveHeight(model, info));
 		outerRadius.setDouble(model.getOuterRadius());
 		innerRadius.setDouble(model.getInnerRadius());
 		nSamples.setInteger(10);
@@ -116,7 +123,13 @@ public class AtmosphereShader {
 				mult * 0.05 * (1.0f + 20 * this.atmWeatherScatterFactor) * model.getSkyDispGreen(),
 				mult * 0.05 * (1.0f + 20 * this.atmWeatherScatterFactor) * model.getSkyDispBlue(),
 				1.0);
+		atmosphereFade.setDouble(info.atmosphereFade);
 
 		return this.atmosphere;
+	}
+
+	private static double resolveHeight(AtmosphereModel model, StellarRI info) {
+		return info.ringworldSnapshot == null ? model.getHeight()
+				: info.ringworldSnapshot.atmosphereGeometryHeight();
 	}
 }

@@ -5,6 +5,7 @@ import org.lwjgl.opengl.GL11;
 import net.minecraft.client.renderer.GlStateManager;
 import stellarium.StellarSkyResources;
 import stellarium.StellarSky;
+import stellarium.render.stellars.AtmosphericAppearance;
 import stellarium.render.stellars.access.EnumStellarPass;
 import stellarium.render.stellars.layer.LayerRHelper;
 import stellarium.render.util.FloatVertexFormats;
@@ -27,6 +28,8 @@ public enum MoonRenderer implements ICelestialObjectRenderer<MoonRenderCache> {
 				float minV = (phase / 4) * 0.5f;
 				float weather = 1.0f
 						- info.world.getRainStrength(info.partialTicks) * 0.8f;
+				float weatherTransmission = AtmosphericAppearance.blend(1.0f, weather,
+						info.atmosphereFade);
 
 				GlStateManager.enableBlend();
 				GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
@@ -35,9 +38,12 @@ public enum MoonRenderer implements ICelestialObjectRenderer<MoonRenderCache> {
 				info.renderTexturedBillboard(cache.appPos, LayerRHelper.DEEP_DEPTH * 0.5,
 						Math.asin(cache.size) * VANILLA_TEXTURE_CONTENT_SCALE,
 						minU, minV, minU + 0.25f, minV + 0.5f,
-						cache.spriteRed * weather,
-						cache.spriteGreen * weather,
-						cache.spriteBlue * weather, 1.0f);
+						AtmosphericAppearance.blend(cache.vacuumSpriteRed, cache.spriteRed,
+								info.atmosphereFade) * weatherTransmission,
+						AtmosphericAppearance.blend(cache.vacuumSpriteGreen, cache.spriteGreen,
+								info.atmosphereFade) * weatherTransmission,
+						AtmosphericAppearance.blend(cache.vacuumSpriteBlue, cache.spriteBlue,
+								info.atmosphereFade) * weatherTransmission, 1.0f);
 				info.builder.finishDrawing();
 				info.renderer.draw(info.builder);
 				info.unbindTexShader();

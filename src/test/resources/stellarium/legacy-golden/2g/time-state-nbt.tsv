@@ -1,0 +1,5 @@
+# Public-setter states and NBT round-trip values.
+id	dimension	multiplier	saved_multiplier	system_sync	interval_seconds	timezone_override	timezone_minutes	location_override	latitude	longitude	altitude	classification
+paused_after_two	0	0.0	2.0	true	1	true	840	true	90.0	330.0	123.5	LEGACY_NBT_CONTRACT
+clamped_negative	1	-20.0	-20.0	false	3600	true	-840	true	-90.0	5.0	-64.0	LEGACY_NBT_CONTRACT
+missing_saved_tag	2	2.0	1.0	false	60	false	0	false	0.0	0.0	0.0	KNOWN_LEGACY_COMPATIBILITY_DEFAULT_RESUME

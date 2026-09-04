@@ -22,6 +22,7 @@ import stellarium.stellars.deepsky.DeepSkyObject;
 import stellarium.stellars.layer.StellarCollection;
 import stellarium.stellars.layer.StellarObject;
 import stellarium.stellars.system.SolarObject;
+import stellarium.stellars.system.Moon;
 import stellarium.time.StellarSkyTime;
 import stellarium.util.MCUtil;
 import stellarium.world.StellarScene;
@@ -72,7 +73,8 @@ final class CelestialTargetTracker {
         float fov = MCUtil.getFOVModifier(mc.entityRenderer, 1.0f, true);
         double tolerance = Math.max(0.05, configuredTolerance * fov / 70.0);
         Candidate best = findLegacy(mc, coordinate, groundLook, tolerance, hideBelowHorizon,
-                StellarSky.PROXY.getClientSettings().lowPowerRenderer);
+                StellarSky.PROXY.getClientSettings().lowPowerRenderer,
+                StellarSky.PROXY.getClientSettings().renderMoon);
 
         double epochYears = StellarSkyTime.getAstronomicalYear(mc.world,
                 mc.world.getWorldTime()) - 2016.0;
@@ -89,7 +91,7 @@ final class CelestialTargetTracker {
                 Candidate candidate = new Candidate(extended.identifier,
                         extended.englishName, extended.chineseName, extended.type,
                         extended.magnitude, groundDirection, extended.equatorialDirection,
-                        extended.separationDegrees, null, 1);
+                        extended.separationDegrees, null, 1, false);
                 if(isBetter(candidate, best))
                 best = candidate;
             }
@@ -99,7 +101,7 @@ final class CelestialTargetTracker {
 
     private static Candidate findLegacy(Minecraft mc, ICCoordinates coordinate,
             Vector3 groundLook, double toleranceDegrees, boolean hideBelowHorizon,
-            boolean lowPowerRenderer) {
+            boolean lowPowerRenderer, boolean renderMoon) {
         StellarManager manager;
         try {
             manager = StellarManager.getManager(mc.world);
@@ -116,6 +118,8 @@ final class CelestialTargetTracker {
         for(StellarCollection<?> collection : manager.getCelestialManager().getLayers()) {
             for(String identifier : identifiers) {
                 for(StellarObject object : collection.getLoadedObjects(identifier)) {
+                    if(object instanceof Moon && !renderMoon)
+                        continue;
                     Vector3 currentPosition = object.getCurrentPos();
                     // The observer's home planet is represented by a zero
                     // relative vector. It is not a pointable sky target, and
@@ -154,7 +158,7 @@ final class CelestialTargetTracker {
                     Candidate candidate = new Candidate(identifier(object), englishName(object),
                             chineseName(object), objectTypeName(object),
                             object.getStandardMagnitude(), ground, equatorial, separation,
-                            phase, object instanceof SolarObject ? 0 : 1);
+                            phase, object instanceof SolarObject ? 0 : 1, object instanceof Moon);
                     if(isBetter(candidate, best))
                         best = candidate;
                 }
@@ -257,7 +261,10 @@ final class CelestialTargetTracker {
         }
     }
 
-    CelestialTarget getTarget() { return target; }
+    CelestialTarget getTarget(boolean renderMoon) {
+        // A config change can precede the next throttled target query.
+        return target != null && target.moon && !renderMoon ? null : target;
+    }
     SpCoord getCursorHorizontal() { return cursorHorizontal; }
 
     private static final class Candidate {
@@ -266,21 +273,23 @@ final class CelestialTargetTracker {
         final Vector3 ground, equatorial;
         final Double phase;
         final int priority;
+        final boolean moon;
 
         Candidate(String identifier, String englishName, String chineseName, String type,
                 double magnitude, Vector3 ground, Vector3 equatorial, double separation,
-                Double phase, int priority) {
+                Double phase, int priority, boolean moon) {
             this.identifier = identifier; this.englishName = englishName;
             this.chineseName = chineseName; this.type = type; this.magnitude = magnitude;
             this.ground = ground; this.equatorial = equatorial;
             this.separation = separation; this.phase = phase; this.priority = priority;
+            this.moon = moon;
         }
 
         CelestialTarget toTarget() {
             SpCoord horizontal = new SpCoord().setWithVec(ground);
             SpCoord eq = new SpCoord().setWithVec(equatorial);
             return new CelestialTarget(identifier, englishName, chineseName, type, magnitude, horizontal.y,
-                    normalizeDegrees(90.0 - horizontal.x), eq.x, eq.y, phase);
+                    normalizeDegrees(90.0 - horizontal.x), eq.x, eq.y, phase, moon);
         }
 
         private static double normalizeDegrees(double degrees) {

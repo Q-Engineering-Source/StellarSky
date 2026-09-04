@@ -18,6 +18,7 @@ import stellarapi.impl.celestial.DefaultCelestialPack;
 import stellarium.api.ISkyRenderType;
 import stellarium.api.ISkySetType;
 import stellarium.api.StellarSkyAPI;
+import stellarium.world.ring.RingworldSettings;
 
 public class PerDimensionSettings extends SimpleHierarchicalNBTConfig {	
 	private final WorldSet worldSet;
@@ -114,7 +115,9 @@ public class PerDimensionSettings extends SimpleHierarchicalNBTConfig {
        	this.addConfigProperty(this.propLightPollutionRate);
 
        	this.addConfigProperty(this.propMinimumSkyRenderBrightness);
-       	this.addConfigProperty(this.propLandscapeEnabled);
+        this.addConfigProperty(this.propLandscapeEnabled);
+
+        this.putSubConfig("ringworld", new RingworldSettings());
 	}
 
 	@Override
@@ -294,6 +297,11 @@ public class PerDimensionSettings extends SimpleHierarchicalNBTConfig {
 	public boolean doesPatchProvider() {
 		return propPatchProvider.getBoolean();
 	}
+
+    public RingworldSettings getRingworldSettings() {
+        // applyCopy replaces sub-configs; always resolve the copied entry.
+        return (RingworldSettings) getSubConfig("ringworld");
+    }
 	
 	public boolean allowRefraction() {
 		return propAllowRefraction.getBoolean();

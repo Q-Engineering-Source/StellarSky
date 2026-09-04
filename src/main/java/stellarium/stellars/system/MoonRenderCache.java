@@ -15,6 +15,7 @@ import stellarium.view.ViewerInfo;
 public class MoonRenderCache implements IObjRenderCache<Moon, SolarSystemClientSettings> {
 	
 	protected boolean shouldRenderDominate, shouldRender;
+	private boolean renderMoon = true;
 	
 	protected SpCoord appCoord;
 	protected Vector3 appPos;
@@ -26,6 +27,7 @@ public class MoonRenderCache implements IObjRenderCache<Moon, SolarSystemClientS
 
 	protected float domination;
 	protected float spriteRed, spriteGreen, spriteBlue;
+	protected float vacuumSpriteRed, vacuumSpriteGreen, vacuumSpriteBlue;
 	protected int phaseIndex;
 
 	protected Vector3 buf = new Vector3();
@@ -33,6 +35,13 @@ public class MoonRenderCache implements IObjRenderCache<Moon, SolarSystemClientS
 
 	@Override
 	public void updateSettings(ClientSettings settings, SolarSystemClientSettings specificSettings, Moon object) {
+		this.renderMoon = settings == null || settings.renderMoon;
+		if(!this.renderMoon) {
+			this.shouldRender = false;
+			this.shouldRenderDominate = false;
+			return;
+		}
+
 		this.appCoord = new SpCoord();
 		this.appPos = new Vector3();
 
@@ -46,6 +55,9 @@ public class MoonRenderCache implements IObjRenderCache<Moon, SolarSystemClientS
 
 	@Override
 	public void updateCache(Moon object, ViewerInfo info) {
+		if(!this.renderMoon)
+			return;
+
 		appPos.set(object.earthPos);
 		info.coordinate.getProjectionToGround().transform(this.appPos);
 		appPos.normalize();
@@ -67,15 +79,18 @@ public class MoonRenderCache implements IObjRenderCache<Moon, SolarSystemClientS
 		double phaseCorrection = atlasIllumination > 1.0e-6
 				? Math.min(2.0, illumination / atlasIllumination) : 0.0;
 		double surfaceBrightness = object.brightness * phaseCorrection;
-		this.spriteRed = (float) surfaceBrightness
+		this.vacuumSpriteRed = (float) surfaceBrightness;
+		this.vacuumSpriteGreen = (float) surfaceBrightness;
+		this.vacuumSpriteBlue = (float) surfaceBrightness;
+		this.spriteRed = this.vacuumSpriteRed
 				* CelestialBrightness.atmosphericTransmission(
 						info, appCoord, Wavelength.red);
-		this.spriteGreen = (float) surfaceBrightness
+		this.spriteGreen = this.vacuumSpriteGreen
 				* CelestialBrightness.atmosphericTransmission(
-						info, appCoord, Wavelength.V);
-		this.spriteBlue = (float) surfaceBrightness
+							info, appCoord, Wavelength.V);
+		this.spriteBlue = this.vacuumSpriteBlue
 				* CelestialBrightness.atmosphericTransmission(
-						info, appCoord, Wavelength.B);
+							info, appCoord, Wavelength.B);
 
 		this.size = (float) (object.radius / object.earthPos.size());
 		this.shouldRenderDominate = true; // TODO Proper render domination check

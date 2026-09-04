@@ -7,6 +7,6 @@
   "url": "http://www.minecraftforum.net/forums/mapping-and-modding/minecraft-mods/wip-mods/1444983-wip-stellarium-real-constellations-sun-moon",
   "authorList": [ "Abastro" ],
   "credits": "GPL-2.0-or-later. Extended catalogues and rendering techniques from Stellarium contributors.",
-  "requiredMods": [ "Forge", "sciapi" ],
-  "depenencies": [ "sciapi", "CalendarAPI" ]
+  "requiredMods": [ "forge", "stellarapi" ],
+  "dependencies": [ "stellarapi" ]
 }]

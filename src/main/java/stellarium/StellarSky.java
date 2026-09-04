@@ -125,9 +125,12 @@ public class StellarSky {
 
 	@NetworkCheckHandler
 	public boolean checkNetwork(Map<String, String> modsNversions, Side from) {
+		boolean remoteInstalled = modsNversions.containsKey(StellarSkyReferences.MODID);
 		if(from.isServer())
-			this.existOnServer = modsNversions.containsKey(StellarSkyReferences.MODID);
-		return true;
-		// Does not work well, it's just too late
+			this.existOnServer = remoteInstalled;
+		// Scene NBT is part of the wire contract. Both installed copies must
+		// understand the same schema; retain the existing modless-server fallback.
+		return !remoteInstalled
+				|| StellarSkyReferences.VERSION.equals(modsNversions.get(StellarSkyReferences.MODID));
 	}
 }

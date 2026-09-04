@@ -1,7 +1,9 @@
 package stellarium;
 
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.World;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
+import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.client.event.ConfigChangedEvent;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -11,8 +13,23 @@ import net.minecraftforge.fml.common.gameevent.PlayerEvent.PlayerLoggedOutEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import stellarium.stellars.StellarManager;
 import stellarium.stellars.layer.CelestialManager;
+import stellarium.world.StellarScene;
+import stellarium.world.ring.RingworldLighting;
+import stellarium.world.ring.RingworldClockClientState;
 
 public class StellarForgeEventHook {
+    @SubscribeEvent
+    public void onWorldUnload(WorldEvent.Unload event) {
+        RingworldLighting.publish(event.getWorld(), null);
+        if (event.getWorld().isRemote) {
+            StellarScene scene = StellarScene.getScene(event.getWorld());
+            if (scene != null) {
+                scene.clearRingworldClockSample(event.getWorld());
+            }
+            RingworldClockClientState.onClientWorldUnloaded(event.getWorld());
+        }
+    }
+
 	@SubscribeEvent(priority = EventPriority.HIGHEST)
 	public void preAttachCapabilities(AttachCapabilitiesEvent<World> event) {
 		World world = event.getObject();
@@ -22,12 +39,14 @@ public class StellarForgeEventHook {
 
 		// Now setup StellarManager here
 		StellarManager manager = StellarManager.loadOrCreateManager(world);
-		if(!world.isRemote)
+		if(!world.isRemote) {
 			manager.setup(new CelestialManager(false));
-		// On client - load default before the packet arrives
-		manager.handleServerWithoutMod();
-		if(manager.getCelestialManager() == null)
-			manager.setup(StellarSky.PROXY.getClientCelestialManager().copyFromClient());
+		} else {
+			// Client fallback must never erase the server's configured day/year.
+			manager.handleServerWithoutMod();
+			if(manager.getCelestialManager() == null)
+				manager.setup(StellarSky.PROXY.getClientCelestialManager().copyFromClient());
+		}
 	}
 
 	@SubscribeEvent
@@ -51,12 +70,17 @@ public class StellarForgeEventHook {
 	@SubscribeEvent
 	public void onPlayerChangedDimension(PlayerChangedDimensionEvent event) {
 		if(!event.player.world.isRemote) {
-			StellarManager manager = StellarManager.getManager(event.player.getServer().getEntityWorld());
+			MinecraftServer server = event.player.getServer();
+			StellarManager manager = StellarManager.getManager(server.getEntityWorld());
 			int dimension = event.toDim;
+			World targetWorld = server.getWorld(dimension);
+			if(targetWorld == null)
+				throw new IllegalStateException("Missing target world for dimension " + dimension);
 			StellarSky.INSTANCE.getNetworkManager().sendTimeState(dimension,
 					manager.getTimeMultiplier(dimension), manager.isSystemTimeSyncEnabled(dimension));
 			StellarSky.INSTANCE.getNetworkManager().sendObserverContext(
-					(net.minecraft.entity.player.EntityPlayerMP) event.player, manager, true);
+					(net.minecraft.entity.player.EntityPlayerMP) event.player,
+					targetWorld, manager, true);
 		}
 	}
 

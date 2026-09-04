@@ -15,12 +15,12 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GLContext;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.Maps;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
+import net.minecraft.client.resources.IResource;
 import net.minecraft.util.ResourceLocation;
 import stellarapi.api.lib.math.SpCoord;
 import stellarapi.api.lib.math.Vector3;
@@ -41,58 +41,44 @@ public class ShaderHelper {
 
 	/** Builds shader program. Gives <code>null</code> if it fails. */
 	public @Nullable IShaderObject buildShader(String id, ResourceLocation vertloc, ResourceLocation fragloc) {
-		int vertShader = 0, fragShader = 0;
-		int programObject;
-
-		if(objectMap.containsKey(id)) {
-			//Delete object
-			OpenGlHelper.glDeleteProgram(objectMap.get(id).programId);
-		}
-
+		int vertShader = 0, fragShader = 0, programObject = 0;
 		StellarSky.INSTANCE.getLogger().info("Setting up a shader program with ID {}", id);
-
-		vertShader = createShader(vertloc, OpenGlHelper.GL_VERTEX_SHADER);
-		fragShader = createShader(fragloc, OpenGlHelper.GL_FRAGMENT_SHADER);
-
-
-		if(vertShader == 0 || fragShader == 0)
-			return null;
-
-		//Creates program object
-		programObject = OpenGlHelper.glCreateProgram();
-
-		if(programObject == 0)
-			return null;
-
-		//Attatches shaders to object
-		OpenGlHelper.glAttachShader(programObject, vertShader);
-		OpenGlHelper.glAttachShader(programObject, fragShader);
-
-		//Links the program
-		OpenGlHelper.glLinkProgram(programObject);
-
-		//Check if link is done correctly
-		if (OpenGlHelper.glGetProgrami(programObject, OpenGlHelper.GL_LINK_STATUS) == GL11.GL_FALSE) {
-			StellarSky.INSTANCE.getLogger().error("Failed to link the shader program");
-			StellarSky.INSTANCE.getLogger().error(getLogInfo(programObject));
-			return null;
+		try {
+			vertShader = createShader(vertloc, OpenGlHelper.GL_VERTEX_SHADER);
+			fragShader = createShader(fragloc, OpenGlHelper.GL_FRAGMENT_SHADER);
+			if(vertShader == 0 || fragShader == 0) return null;
+			programObject = OpenGlHelper.glCreateProgram();
+			if(programObject == 0) return null;
+			OpenGlHelper.glAttachShader(programObject, vertShader);
+			OpenGlHelper.glAttachShader(programObject, fragShader);
+			OpenGlHelper.glLinkProgram(programObject);
+			if(OpenGlHelper.glGetProgrami(programObject, OpenGlHelper.GL_LINK_STATUS) == GL11.GL_FALSE) {
+				StellarSky.INSTANCE.getLogger().error("Failed to link shader {}: {}", id, getLogInfo(programObject));
+				return null;
+			}
+			detachShader(programObject, vertShader);
+			detachShader(programObject, fragShader);
+			ShaderObject object = new ShaderObject(programObject);
+			ShaderObject previous = objectMap.put(id, object);
+			programObject = 0;
+			if(previous != null) OpenGlHelper.glDeleteProgram(previous.programId);
+			return object;
+		} finally {
+			if(programObject != 0) OpenGlHelper.glDeleteProgram(programObject);
+			if(vertShader != 0) OpenGlHelper.glDeleteShader(vertShader);
+			if(fragShader != 0) OpenGlHelper.glDeleteShader(fragShader);
 		}
+	}
 
-		// Just to use it in other places later.
-		/*ARBShaderObjects.glValidateProgramARB(programObject);
-		if (ARBShaderObjects.glGetObjectParameteriARB(programObject, ARBShaderObjects.GL_OBJECT_VALIDATE_STATUS_ARB) == GL11.GL_FALSE) {
-			throw new RuntimeException(getLogInfo(programObject));
-		}*/
-
-		ShaderObject object = new ShaderObject(programObject);
-		objectMap.put(id, object);
-
-		return object;
+	private static void detachShader(int program, int shader) {
+		if(OpenGlHelper.openGL21) GL20.glDetachShader(program, shader);
+		else ARBShaderObjects.glDetachObjectARB(program, shader);
 	}
 
 	private void bindShader(ShaderObject object){
 		if(this.current == null)
-			this.prevShader = GlStateManager.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+			this.prevShader = OpenGlHelper.openGL21 ? GlStateManager.glGetInteger(GL20.GL_CURRENT_PROGRAM)
+					: ARBShaderObjects.glGetHandleARB(ARBShaderObjects.GL_PROGRAM_OBJECT_ARB);
 
 		if(this.current != object) {
 			this.current = object;
@@ -108,28 +94,41 @@ public class ShaderHelper {
 	}
 
 	public void releaseCurrentShader(){
+		if(this.current == null)
+			return;
 		this.current = null;
 
 		//Use empty program
 		OpenGlHelper.glUseProgram(this.prevShader);
 	}
 
+	/** Requires a uniform active in the linked program, not merely declared in source text. */
+	public IUniformField requireField(IShaderObject shader, String fieldName) {
+		if(!(shader instanceof ShaderObject object))
+			throw new IllegalArgumentException("Shader was not built by ShaderHelper");
+		if(OpenGlHelper.glGetUniformLocation(object.programId, fieldName) < 0)
+			throw new IllegalStateException("Linked shader lacks required uniform: " + fieldName);
+		return object.getField(fieldName);
+	}
+
 
 	private int createShader(ResourceLocation location, int shaderType) {
 		int shader = 0;
+		boolean compiled = false;
 		if(location == null)
 			return 0;
 
 		try {
-			BufferedInputStream bufferedinputstream = new BufferedInputStream(
-					Minecraft.getMinecraft().getResourceManager().getResource(location).getInputStream());
-			byte[] abyte = IOUtils.toByteArray(bufferedinputstream);
+			// Close resources before allocating a GL shader, so an I/O close failure
+			// cannot orphan a successfully compiled handle before ownership transfers.
+			byte[] abyte = readShaderBytes(location);
 			ByteBuffer bytebuffer = BufferUtils.createByteBuffer(abyte.length);
 			bytebuffer.put(abyte);
 			bytebuffer.position(0);
 
 			//Creates the shader object
 			shader = OpenGlHelper.glCreateShader(shaderType);
+			if(shader == 0) return 0;
 
 			//Provide source to the shader
 			OpenGlHelper.glShaderSource(shader, bytebuffer);
@@ -144,11 +143,20 @@ public class ShaderHelper {
 				return 0;
 			}
 
+			compiled = true;
 			return shader;
 		}
 		catch(IOException exc) {
-			OpenGlHelper.glDeleteShader(shader);
-			throw Throwables.propagate(exc);
+			throw new IllegalStateException("Unable to read shader " + location, exc);
+		} finally {
+			if(!compiled && shader != 0) OpenGlHelper.glDeleteShader(shader);
+		}
+	}
+
+	private static byte[] readShaderBytes(ResourceLocation location) throws IOException {
+		try(IResource resource = Minecraft.getMinecraft().getResourceManager().getResource(location);
+			BufferedInputStream stream = new BufferedInputStream(resource.getInputStream())) {
+			return IOUtils.toByteArray(stream);
 		}
 	}
 

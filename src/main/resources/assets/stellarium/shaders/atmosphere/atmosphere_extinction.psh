@@ -1,9 +1,10 @@
 #version 120
 
 varying vec4 alpha4;
+uniform float atmosphereFade;
 
 void main()
 {
-    gl_FragColor = alpha4;
+    gl_FragColor = vec4(mix(vec3(1.0), alpha4.rgb, atmosphereFade), alpha4.a);
     gl_FragColor.a = 1.0;
 }

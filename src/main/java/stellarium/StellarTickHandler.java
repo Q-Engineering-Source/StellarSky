@@ -8,6 +8,7 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.relauncher.Side;
 import stellarium.time.StellarSkyTime;
 import stellarium.world.StellarScene;
+import stellarium.world.ring.RingworldLighting;
 
 public class StellarTickHandler {
 	@SubscribeEvent
@@ -20,7 +21,9 @@ public class StellarTickHandler {
 				if(dimManager != null) {
 					dimManager.update(world, world.getWorldTime(), world.getTotalWorldTime());
 					StellarSky.PROXY.updateTick();
-				}
+				} else {
+                    RingworldLighting.publish(world, null);
+                }
 			}
 		}
 	}
@@ -46,12 +49,18 @@ public class StellarTickHandler {
 			if(!e.world.getGameRules().getBoolean("doDaylightCycle")
 					&& (StellarSkyTime.isSystemTimeSyncEnabled(e.world)
 							|| StellarSkyTime.getMultiplier(e.world) != 1.0)) {
-				e.world.setWorldTime(StellarSkyTime.nextWorldTime(e.world, e.world.getWorldTime()));
+				StellarScene scene = StellarScene.getScene(e.world);
+				if (scene != null)
+					scene.applyKnownWorldTimeUpdate(e.world, e.world.getWorldTime());
+				else
+					e.world.setWorldTime(StellarSkyTime.calculateNextWorldTime(e.world, e.world.getWorldTime()).worldTime());
 			}
 			
 			StellarScene dimManager = StellarScene.getScene(e.world);
 			if(dimManager != null)
 				dimManager.update(e.world, e.world.getWorldTime(), defWorld.getTotalWorldTime());
+            else
+                RingworldLighting.publish(e.world, null);
 		}
 	}
 }

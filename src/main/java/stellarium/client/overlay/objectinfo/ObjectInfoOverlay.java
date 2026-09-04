@@ -4,6 +4,7 @@ import java.util.Locale;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
+import stellarium.StellarSky;
 import stellarapi.api.gui.overlay.EnumOverlayMode;
 import stellarapi.api.gui.overlay.IOverlayElement;
 import stellarapi.api.lib.math.SpCoord;
@@ -38,7 +39,7 @@ public class ObjectInfoOverlay implements IOverlayElement<ObjectInfoSettings> {
         if(!settings.enabled || mc.world == null)
             return;
         Gui.drawRect(0, 0, WIDTH, HEIGHT, 0x78000000);
-        CelestialTarget target = tracker.getTarget();
+        CelestialTarget target = tracker.getTarget(StellarSky.PROXY.getClientSettings().renderMoon);
         if(target == null) {
             boolean chinese = isChineseLocale();
             draw(chinese ? "没有指向天体" : "No celestial target", 5, 5, 0xFFB8C2CC);

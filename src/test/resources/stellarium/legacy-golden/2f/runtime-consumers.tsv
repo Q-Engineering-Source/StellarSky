@@ -1,0 +1,13 @@
+# Cleanroom 0.6.8-alpha + Java 25.0.2 + Fugue 0.23.7 + Scalar 3.8.4 dedicated-server observations.
+# SAPI wake times depend on evaluated celestial state; their numeric values are provenance samples, not timeless exact golden constants.
+id	consumer	wake_enabled	do_daylight	do_weather	multiplier	start_time	after_start	after_end	sleeping_after_start	sleeping_after_end	wake_calls	spawn_committed	raining_after_start	raining_after_end	classification
+sapi_daylight_m1	WORLD_TICK_START	true	true	true	1	14000	25589	25590	false	false	1	true	false	false	OBSERVED_RUNTIME_CELESTIAL_DEPENDENT
+sapi_daylight_m0	WORLD_TICK_START	true	true	true	0	14000	25585	25585	false	false	1	true	false	false	OBSERVED_RUNTIME_CELESTIAL_DEPENDENT
+sapi_daylight_mneg1	WORLD_TICK_START	true	true	true	-1	14000	25585	25584	false	false	1	true	false	false	OBSERVED_RUNTIME_CELESTIAL_DEPENDENT
+sapi_no_daylight_m1	WORLD_TICK_START	true	false	true	1	14000	14000	14000	false	false	1	true	false	false	LEGACY_CONTRACT
+sapi_no_weather_reset	WORLD_TICK_START	true	true	false	1	14000	25584	25585	false	false	1	true	true	true	OBSERVED_RUNTIME_CELESTIAL_DEPENDENT
+vanilla_daylight_m1	WORLD_SERVER_TICK	false	true	true	1	14000	14000	24001	true	false	1	true	true	false	LEGACY_CONTRACT
+vanilla_daylight_m0	WORLD_SERVER_TICK	false	true	true	0	14000	14000	24000	true	false	1	true	true	false	LEGACY_CONTRACT
+vanilla_daylight_mneg1	WORLD_SERVER_TICK	false	true	true	-1	14000	14000	23999	true	false	1	true	true	false	LEGACY_CONTRACT
+vanilla_no_daylight_m1	WORLD_SERVER_TICK	false	false	true	1	14000	14000	14000	true	false	1	true	true	false	LEGACY_CONTRACT
+vanilla_no_weather_reset	WORLD_SERVER_TICK	false	true	false	1	14000	14000	24001	true	false	1	true	true	true	LEGACY_CONTRACT

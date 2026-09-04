@@ -122,22 +122,35 @@ public final class StellarSkyTime {
 	 * The world keeps ticking in every case; only the daylight clock changes.
 	 */
 	public static long nextWorldTime(World world, long currentTime) {
+		return calculateNextWorldTime(world, currentTime).worldTime();
+	}
+
+	/** One stateful cadence calculation; callers must not invoke it as prediction. */
+	public static WorldTimeUpdate calculateNextWorldTime(World world, long currentTime) {
 		if(isSystemTimeSyncEnabled(world)) {
 			long now = System.currentTimeMillis();
 			if(shouldCorrectSystemTime(world, now)) {
 				int offset = world.isRemote
 						? getClientState(world.provider.getDimension()).systemTimeOffsetMinutes
 						: getSystemTimeOffsetMinutes(world);
-				return getSystemWorldTime(offset, now);
+				return new WorldTimeUpdate(getSystemWorldTime(offset, now), false, false);
 			}
-			return currentTime + getScaledDelta(world, 72.0);
+			return addCadence(currentTime, getScaledDelta(world, 72.0));
 		}
 
 		double multiplier = getMultiplier(world);
 		if(multiplier == 0.0)
-			return currentTime;
-		return currentTime + getScaledDelta(world, multiplier);
+			return new WorldTimeUpdate(currentTime, true, false);
+		return addCadence(currentTime, getScaledDelta(world, multiplier));
 	}
+
+	private static WorldTimeUpdate addCadence(long currentTime, long delta) {
+		long next = currentTime + delta;
+		boolean wrapped = delta > 0L && next < currentTime || delta < 0L && next > currentTime;
+		return new WorldTimeUpdate(next, true, wrapped);
+	}
+
+	public record WorldTimeUpdate(long worldTime, boolean normalCadence, boolean arithmeticWrapped) { }
 
 	/**
 	 * Applies the same cadence to vanilla weather countdown writes. Negative time

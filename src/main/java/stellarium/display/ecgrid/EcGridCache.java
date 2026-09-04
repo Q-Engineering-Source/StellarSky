@@ -12,8 +12,10 @@ public class EcGridCache implements IDisplayCache<EcGridSettings> {
 
 	private Vector3 baseColor, latitudeColor, longitudeColor;
 	protected Vector3[][] displayvec = null;
+	protected Vector3[][] rawDisplayvec = null;
 	protected Vector3[][] colorvec = null;
 	protected Vector3[] ecliptic = null;
+	protected Vector3[] rawEcliptic = null;
 	protected int latn, longn;
 	protected boolean enabled, gridEnabled, eclipticEnabled;
 	protected float brightness;
@@ -28,10 +30,13 @@ public class EcGridCache implements IDisplayCache<EcGridSettings> {
 		if(this.enabled) {
 			if(this.gridEnabled) {
 				this.displayvec = Allocator.createAndInitialize(longn, latn+1);
+				this.rawDisplayvec = Allocator.createAndInitialize(longn, latn+1);
 				this.colorvec = Allocator.createAndInitialize(longn, latn+1);
 			}
-			if(this.eclipticEnabled)
+			if(this.eclipticEnabled) {
 				this.ecliptic = Allocator.createAndInitialize(longn);
+				this.rawEcliptic = Allocator.createAndInitialize(longn);
+			}
 		}
 		this.brightness = (float) specificSettings.displayAlpha;
 		this.baseColor = new Vector3(specificSettings.displayBaseColor);
@@ -52,6 +57,7 @@ public class EcGridCache implements IDisplayCache<EcGridSettings> {
 			if(this.eclipticEnabled) {
 				Buf.set(new SpCoord(-longc*360.0/longn, 0.0).getVec());
 				info.projectionToGround.transform(Buf);
+				rawEcliptic[longc].set(Buf).normalize();
 
 				coord = new SpCoord();
 				coord.setWithVec(Buf);
@@ -65,6 +71,7 @@ public class EcGridCache implements IDisplayCache<EcGridSettings> {
 				for(int latc=0; latc<=latn; latc++){
 					Buf.set(new SpCoord(-longc*360.0/longn, latc*180.0/latn - 90.0).getVec());
 					info.projectionToGround.transform(Buf);
+					rawDisplayvec[longc][latc].set(Buf).normalize();
 
 					coord = new SpCoord();
 					coord.setWithVec(Buf);

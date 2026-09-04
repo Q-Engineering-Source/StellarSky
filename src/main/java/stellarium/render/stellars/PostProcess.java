@@ -170,6 +170,8 @@ public class PostProcess {
 		double atmosphericSeeing = viewer.sky.getSeeing(Wavelength.V);
 		if(!Double.isFinite(atmosphericSeeing) || atmosphericSeeing < 0.0)
 			atmosphericSeeing = 0.0;
+		atmosphericSeeing = AtmosphericAppearance.scaleAtmosphericEffect(
+				atmosphericSeeing, info.atmosphereFade);
 		double opticalResolution = Math.hypot(
 				EyeDetector.DEFAULT_RESOLUTION, atmosphericSeeing);
 		double resolution = Math.toRadians(opticalResolution)

@@ -1,10 +1,9 @@
 package stellarium.world;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-
-import com.google.common.collect.Lists;
 
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.world.World;
@@ -22,22 +21,40 @@ import stellarapi.api.world.worldset.WorldSet;
 import stellarapi.example.CelestialHelperSimple;
 import stellarium.StellarSky;
 import stellarium.stellars.StellarManager;
-import stellarium.stellars.layer.StellarCollection;
-import stellarium.stellars.layer.StellarLayer;
+import stellarium.stellars.runtime.WorldCelestialRuntime;
 import stellarium.time.StellarSkyTime;
+import stellarium.world.ring.RingworldCelestialHelper;
+import stellarium.world.ring.RingworldClockClientState;
+import stellarium.world.ring.RingworldClockMirror;
+import stellarium.world.ring.RingworldClockPublisher;
+import stellarium.world.ring.RingworldClockSample;
+import stellarium.world.ring.RingworldClockContinuityTracker;
+import stellarium.world.ring.RingworldDisplaySnapshot;
+import stellarium.world.ring.RingworldRenderObserver;
+import stellarium.world.ring.RingworldThinAtmosphere;
+import stellarium.world.ring.RingworldRuntimeGeneration;
+import stellarium.world.ring.RingworldWorldTimeMutationAccess;
+import stellarium.world.ring.RingworldLightFrame;
+import stellarium.world.ring.RingworldLighting;
+import stellarium.world.ring.RingworldSunshade;
 
 public final class StellarScene implements ICelestialScene {
-	private final StellarManager manager;
+	private final StellarManager committedManager;
+	private StellarManager manager;
 	private final World world;
 	private final WorldSet worldSet;
+	private final WorldCelestialRuntime celestialRuntime;
 
 	private PerDimensionSettings settings;
 	private IStellarSkySet skyset;
 	private StellarCoordinates coordinate;
 	private double configuredLatitude;
 	private double configuredLongitude;
-	private List<CelestialObject> foundSuns = Lists.newArrayList();
-	private List<CelestialObject> foundMoons = Lists.newArrayList();
+    private RingworldSunshade ringworldSunshade;
+    private final RingworldClockPublisher ringworldClockPublisher;
+    private UUID ringworldRuntimeGeneration;
+    private final RingworldClockMirror ringworldClockMirror = new RingworldClockMirror();
+    private final RingworldClockContinuityTracker ringworldClockContinuity = new RingworldClockContinuityTracker();
 
 	@Deprecated
 	public static StellarScene getScene(World world) {
@@ -48,7 +65,10 @@ public final class StellarScene implements ICelestialScene {
 	public StellarScene(World world, WorldSet worldSet, PerDimensionSettings settings) {
 		this.world = world;
 		this.worldSet = worldSet;
-		this.manager = StellarManager.getManager(world);
+		this.committedManager = StellarManager.getManager(world);
+		this.manager = world.isRemote ? committedManager.createClientCandidate() : committedManager;
+		this.celestialRuntime = new WorldCelestialRuntime(world, this.manager);
+		this.ringworldClockPublisher = world.isRemote ? null : new RingworldClockPublisher(UUID.randomUUID());
 		this.settings = settings;
 	}
 
@@ -77,8 +97,13 @@ public final class StellarScene implements ICelestialScene {
 
 		// Writes Stellar Manager.
 		// TODO Stellar API Separate networking code and serialization code
-		nbt.setTag("main", StellarManager.getManager(this.world).serializeNBT());
+		nbt.setTag("main", manager.serializeNBT());
 		settings.writeToNBT(nbt);
+		if (settings.getRingworldSettings().sunshade() != null) {
+			if (ringworldClockPublisher != null) {
+				RingworldRuntimeGeneration.write(nbt, ringworldClockPublisher.generation());
+			}
+		}
 		return nbt;
 	}
 
@@ -87,12 +112,8 @@ public final class StellarScene implements ICelestialScene {
 		// When it's the default world and there's the manager nbt, read it.
 		if(world.provider.getDimension() == 0 || world.isRemote) {
 			if(nbt.hasKey("main", 10)) {
-				manager.deserializeNBT(nbt.getCompoundTag("main"));
+				manager.syncFromNBT(nbt.getCompoundTag("main"), world.isRemote);
 			}
-		}
-
-		if(world.isRemote) {
-			manager.setup(StellarSky.PROXY.getClientCelestialManager().copyFromClient());
 		}
 
 		if(manager.isLocked() || world.isRemote) {
@@ -101,32 +122,118 @@ public final class StellarScene implements ICelestialScene {
 		} else {
 			this.loadSettingsFromConfig();
 		}
+		if (world.isRemote) {
+			this.ringworldRuntimeGeneration = settings.getRingworldSettings().sunshade() == null
+					? null : RingworldRuntimeGeneration.readClient(nbt);
+			ringworldClockMirror.clear();
+		}
 	}
 
 	public List<CelestialObject> getSuns() {
-		return this.foundSuns;
+		return this.celestialRuntime.getSuns();
 	}
 
 	public List<CelestialObject> getMoons() {
-		return this.foundMoons;
+		return this.celestialRuntime.getMoons();
 	}
+
+    public RingworldClockSample getRingworldClockSample() {
+        return world.isRemote && StellarSky.PROXY.getDefWorld() == world && StellarScene.getScene(world) == this
+                ? ringworldClockMirror.currentSampleFor(world, this) : null;
+    }
+
+    public RingworldDisplaySnapshot getRingworldDisplaySnapshot(RingworldRenderObserver observer) {
+        if (!world.isRemote || StellarSky.PROXY.getDefWorld() != world || StellarScene.getScene(world) != this
+                || ringworldSunshade == null) {
+            return null;
+        }
+        RingworldClockMirror.DisplayTime displayTime = ringworldClockMirror.displayTimeFor(world, this);
+        return new RingworldDisplaySnapshot(world, this, displayTime, ringworldSunshade,
+                displayTime == null ? null : ringworldSunshade.phase(displayTime.previous().worldTime(), displayTime.current().worldTime(),
+                        displayTime.fraction()), settings.getRingworldSettings().sunshadeHeightBlocks(),
+                settings.getRingworldSettings().sunshadeThicknessBlocks(), observer,
+                RingworldThinAtmosphere.fadeAt(observer.y(), observer.z(),
+                        settings.getRingworldSettings().thinAtmosphereFadeStartY()),
+                AtmosphereGeometry.resolveHeight(world, observer.y(), settings));
+    }
+
+    public boolean acceptRingworldClockSample(RingworldClockSample sample, RingworldClockClientState.Receipt receipt) {
+        if (!world.isRemote || StellarSky.PROXY.getDefWorld() != world || StellarScene.getScene(world) != this
+                || ringworldRuntimeGeneration == null
+                || ringworldSunshade == null) {
+            return false;
+        }
+        return ringworldClockMirror.acceptForCommittedScene(world.provider.getDimension(),
+                ringworldRuntimeGeneration, sample, world, this, receipt);
+    }
+
+    public void clearRingworldClockSample(World candidateWorld) {
+        if (candidateWorld == world) {
+            ringworldClockMirror.clear();
+        }
+    }
+
+    /** Applies exactly one known cadence write without changing its calculated value. */
+    public long applyKnownWorldTimeUpdate(World targetWorld, long calculationBase) {
+        if (targetWorld != world || targetWorld.isRemote || StellarScene.getScene(targetWorld) != this) {
+            throw new IllegalStateException("Ringworld time provenance requires the active server scene world");
+        }
+        if (ringworldSunshade == null) {
+            long next = StellarSkyTime.nextWorldTime(targetWorld, calculationBase);
+            targetWorld.setWorldTime(next);
+            return next;
+        }
+        RingworldClockContinuityTracker.Observation before = observeWorldTime(targetWorld);
+        RingworldClockContinuityTracker.KnownWrite write = ringworldClockContinuity.beginKnownWrite(before);
+        boolean closed = false;
+        try {
+            StellarSkyTime.WorldTimeUpdate update = StellarSkyTime.calculateNextWorldTime(targetWorld, calculationBase);
+            targetWorld.setWorldTime(update.worldTime());
+            ringworldClockContinuity.finishKnownWrite(write, update.worldTime(), observeWorldTime(targetWorld),
+                    update.arithmeticWrapped() || !update.normalCadence() || calculationBase != before.worldTime());
+            closed = true;
+            return update.worldTime();
+        } finally {
+            if (!closed) {
+                ringworldClockContinuity.abortKnownWrite(write);
+            }
+        }
+    }
 
 	public void update(World world, long currentTick, long currentUniversalTick) {
 		coordinate.setSystemTimeModel(manager.getSettings(), StellarSkyTime.isSystemTimeSyncEnabled(world),
 				StellarSkyTime.getSystemTimeOffsetMinutes(world));
-		double astronomicalYear = StellarSkyTime.getAstronomicalYear(world, currentTick);
-		// Celestial objects are shared by the pack, so the active world's
-		// update must happen immediately before its provider/render consumers.
-		manager.updateSkyYear(astronomicalYear);
+		double astronomicalYear = getAstronomicalYear(currentTick);
+		celestialRuntime.update(world, astronomicalYear);
 		coordinate.update(astronomicalYear);
+        if (!world.isRemote && StellarScene.getScene(world) == this) {
+            RingworldLightFrame frame = ringworldSunshade == null ? null
+                    : new RingworldLightFrame(ringworldSunshade,
+                            settings.getRingworldSettings().sunshadeHeightBlocks(),
+                            settings.getRingworldSettings().sunshadeThicknessBlocks(), currentTick);
+            RingworldLighting.publish(world, frame);
+            if (frame != null) {
+                RingworldClockContinuityTracker.Publication publication =
+                        ringworldClockContinuity.previewPublication(observeWorldTime(world));
+                boolean frameMatchesObservedTime = frame.worldTime() == publication.observation().worldTime();
+                RingworldClockSample sample = ringworldClockPublisher.publish(world.provider.getDimension(),
+                        frame.worldTime(), publication.discontinuousBefore() || !frameMatchesObservedTime);
+                if (frameMatchesObservedTime)
+                    ringworldClockContinuity.commitPublication(publication);
+                else
+                    ringworldClockContinuity.markUnproven();
+                StellarSky.INSTANCE.getNetworkManager().sendRingworldClock(world, this, sample);
+            }
+        }
 	}
 
 
 	@Override
 	public void prepare() {
-		foundSuns.clear();
-		foundMoons.clear();
-
+        this.ringworldSunshade = settings.getRingworldSettings().sunshade();
+        if (ringworldSunshade != null && (!settings.doesPatchProvider() || !world.provider.hasSkyLight())) {
+            throw new IllegalArgumentException("Ringworld requires Patch_Provider and a world with skylight");
+        }
 		String dimName = world.provider.getDimensionType().getName();
 		StellarSky.INSTANCE.getLogger().info(String.format("Initializing Dimension Settings on Dimension %s...", dimName));
 		if(settings.allowRefraction())
@@ -150,24 +257,13 @@ public final class StellarScene implements ICelestialScene {
 
 		StellarSky.INSTANCE.getLogger().info("Evaluating Stellar Collections from Celestial State...");
 
-		StellarSky.INSTANCE.getLogger().info("Starting Test Update.");
-		manager.update(0.0);
-		StellarSky.INSTANCE.getLogger().info("Test Update Ended.");
+		StellarSky.INSTANCE.getLogger().info("Preparing world-owned celestial runtime.");
+		celestialRuntime.prepare();
+		StellarSky.INSTANCE.getLogger().info("Prepared world-owned celestial runtime.");
 
-		for(StellarCollection container : manager.getCelestialManager().getLayers()) {
-			StellarLayer type = container.getType();
-			type.initialUpdate(container);
-
-			foundSuns.addAll(type.getSuns(container));
-			foundMoons.addAll(type.getMoons(container));
-		}
-
-		double currentYear = StellarSkyTime.getAstronomicalYear(world, world.getWorldTime());
-		manager.updateSkyYear(currentYear);
+		double currentYear = getAstronomicalYear(world.getWorldTime());
+		celestialRuntime.update(world, currentYear);
 		coordinate.update(currentYear);
-
-		if(world.isRemote)
-			StellarSky.PROXY.setupDimensionLoad(this);
 
 		StellarSky.INSTANCE.getLogger().info("Evaluated Stellar Collections.");
 	}
@@ -175,14 +271,7 @@ public final class StellarScene implements ICelestialScene {
 	@Override
 	public void onRegisterCollection(Consumer<CelestialCollection> colRegistry,
 			BiConsumer<IEffectorType, CelestialObject> effRegistry) {
-		for(CelestialCollection col : manager.getCelestialManager().getLayers())
-			colRegistry.accept(col);
-
-		for(CelestialObject sun : this.foundSuns)
-			effRegistry.accept(IEffectorType.Light, sun);
-
-		for(CelestialObject moon : this.foundMoons)
-			effRegistry.accept(IEffectorType.Tide, moon);
+		celestialRuntime.registerCollections(colRegistry, effRegistry);
 	}
 
 	@Override
@@ -198,6 +287,10 @@ public final class StellarScene implements ICelestialScene {
 	@Override
 	public ICelestialHelper createCelestialHelper() {
 		if(this.getSettings().doesPatchProvider()) {
+            if (ringworldSunshade != null) {
+                return new RingworldCelestialHelper((float) settings.getSunlightMultiplier(),
+                        getSuns().get(0), getMoons().get(0), coordinate, skyset);
+            }
 			return new CelestialHelperSimple((float)this.getSettings().getSunlightMultiplier(), 1.0f,
 					this.getSuns().get(0), this.getMoons().get(0), this.coordinate, this.skyset);
 		} else return null;
@@ -205,6 +298,49 @@ public final class StellarScene implements ICelestialScene {
 
 	@Override
 	public IAdaptiveRenderer createSkyRenderer() {
+		// CelestialPackManager calls this only after the candidate scene has been
+		// committed. Publishing the client model from prepare() would let a later
+		// pack-load failure leave the renderer bound to an uncommitted scene.
+		if(world.isRemote) {
+            if (StellarScene.getScene(world) != this)
+                throw new IllegalStateException("Cannot publish an uncommitted client celestial scene");
+            if (manager != committedManager) {
+                committedManager.adoptPreparedClientState(world, manager, celestialRuntime.getPreparedGraph());
+                manager = committedManager;
+                // A failing display callback must not leave this committed scene
+                // reading detached metadata while its graph reads the world manager.
+                StellarSky.PROXY.setupStellarLoad(committedManager);
+            } else {
+                committedManager.adoptPreparedClientGraph(world, celestialRuntime.getPreparedGraph());
+            }
+            // The client waits for a server clock sample for this committed scene.
+            // Never carry the previous scene's shade across reload/dimension changes.
+            RingworldLighting.publish(world, null);
+			RingworldClockClientState.onClientSceneCommitted(world, this);
+			ringworldClockMirror.clear();
+			if (ringworldSunshade != null && ringworldRuntimeGeneration == null) {
+				StellarSky.INSTANCE.getLogger().warn("Ringworld scene has no server runtime generation; clock authority is unavailable");
+			}
+			StellarSky.PROXY.setupDimensionLoad(this);
+        }
 		return StellarSky.PROXY.setupSkyRenderer(this.world, this.worldSet, settings.getSkyRendererType());
 	}
+
+    private double getAstronomicalYear(long worldTime) {
+        // A remote candidate must not evaluate its graph using the previous
+        // committed world's day/year. System-time remains the existing S2C mirror.
+        if (world.isRemote && !StellarSkyTime.isSystemTimeSyncEnabled(world)) {
+            return manager.getSkyYear(worldTime);
+        }
+        return StellarSkyTime.getAstronomicalYear(world, worldTime);
+    }
+
+    private static RingworldClockContinuityTracker.Observation observeWorldTime(World world) {
+        if (world.getWorldInfo() instanceof RingworldWorldTimeMutationAccess access) {
+            return new RingworldClockContinuityTracker.Observation(world.getWorldTime(),
+                    access.stellarium$getWorldTimeMutationRevision(),
+                    access.stellarium$isWorldTimeMutationRevisionSaturated());
+        }
+        return new RingworldClockContinuityTracker.Observation(world.getWorldTime(), 0L, true);
+    }
 }

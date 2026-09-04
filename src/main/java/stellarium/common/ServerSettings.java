@@ -13,6 +13,7 @@ import stellarapi.api.lib.config.property.ConfigPropertyInteger;
 import stellarium.stellars.layer.StellarLayerRegistry;
 
 public class ServerSettings extends SimpleHierarchicalNBTConfig {
+	public static final int DEFAULT_DAY_LENGTH_TICKS = 1_728_000;
 	private static final String TIME_MULTIPLIER_KEY = "Time_Multiplier";
 
 	public double day, year;
@@ -37,7 +38,7 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
 		// Removed Server_Enabled.
 		// On the server it's useless considering that all features are disabled.
 		// On the client, it should obey what server want.
-        this.propDay = new ConfigPropertyDouble("Day_Length", "day", 24000.0);
+        this.propDay = new ConfigPropertyDouble("Day_Length", "day", DEFAULT_DAY_LENGTH_TICKS);
         this.propYear = new ConfigPropertyDouble("Year_Length", "year", 365.25);
         this.propYearOffset = new ConfigPropertyInteger("Year_Offset", "yearOffset", 0);
         this.propDayOffset = new ConfigPropertyInteger("Day_Offset", "dayOffset", 0);
@@ -75,7 +76,9 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
 		
 		super.setupConfig(config, category);
         
-        propDay.setComment("Length of a day, in a tick.");
+        propDay.setComment("Solar day length in world ticks. Default: 1728000 ticks per day, "
+                + "72000 per hour (24 hours at 20 TPS with Time_Multiplier=1). "
+                + "System_Time_Sync uses its separate civil-clock mapping.");
         propDay.setRequiresWorldRestart(true);
         propDay.setLanguageKey("config.property.server.daylength");
         
@@ -150,6 +153,8 @@ public class ServerSettings extends SimpleHierarchicalNBTConfig {
 	public void setDefault() {
 		for(ConfigProperty property : this.listProperties)
 			property.setAsDefault();
+		// A server without StellarSky still uses Minecraft's original daylight period.
+		propDay.setDouble(24000.0);
     	propAxialTilt.setDouble(0.0);
     	propTickOffset.setDouble(17500.0);
     	this.tickOffset = 17500.0;
