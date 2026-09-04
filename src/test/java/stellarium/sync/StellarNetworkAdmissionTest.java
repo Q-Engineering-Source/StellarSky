@@ -37,6 +37,10 @@ public class StellarNetworkAdmissionTest {
         Map<String, String> withoutThinAtmosphere = Map.of(StellarSkyReferences.MODID, "1.12.2-0.5.4.7");
         assertFalse(mod.checkNetwork(withoutThinAtmosphere, Side.CLIENT));
         assertFalse(mod.checkNetwork(withoutThinAtmosphere, Side.SERVER));
+        Map<String, String> withoutRenderTimeLocalLight = Map.of(
+                StellarSkyReferences.MODID, "1.12.2-0.5.4.8");
+        assertFalse(mod.checkNetwork(withoutRenderTimeLocalLight, Side.CLIENT));
+        assertFalse(mod.checkNetwork(withoutRenderTimeLocalLight, Side.SERVER));
     }
 
     @Test

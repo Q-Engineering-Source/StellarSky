@@ -84,10 +84,36 @@ public final class RingworldSunshade {
         if (shadowWidthBlocks == 0.0 || shadowWidthBlocks == spacingBlocks) {
             return sampleForDistance(0.0);
         }
-        double relativeProjection = projection - phase.panelCenterBlocks();
-        requireFinite("relativeProjection", relativeProjection);
-        double offsetWithinPeriod = Math.abs(relativeProjection % spacingBlocks);
-        return sampleForDistance(Math.min(offsetWithinPeriod, spacingBlocks - offsetWithinPeriod));
+        return sampleForDistance(evaluateDistanceFromPanelCenter(phase, projection));
+    }
+
+    /** Allocation-free display-phase material query for packed-light hot paths. */
+    public boolean materialOccupied(Phase phase, double x, double z) {
+        if (phase == null) {
+            throw new NullPointerException("phase");
+        }
+        double projection = projectReceiver(x, z);
+        if (!RingworldStripBounds.insideBoard(z) || shadowWidthBlocks == 0.0) {
+            return false;
+        }
+        return shadowWidthBlocks == spacingBlocks
+                || evaluateDistanceFromPanelCenter(phase, projection) <= shadowWidthBlocks / 2.0;
+    }
+
+    /** Allocation-free display-phase transmission query for packed-light hot paths. */
+    public double transmittance(Phase phase, double x, double z) {
+        if (phase == null) {
+            throw new NullPointerException("phase");
+        }
+        double projection = projectReceiver(x, z);
+        if (!RingworldStripBounds.insideBoard(z) || shadowWidthBlocks == 0.0) {
+            return 1.0;
+        }
+        if (shadowWidthBlocks == spacingBlocks) {
+            return 0.0;
+        }
+        return transmittanceForDistance(evaluateDistanceFromPanelCenter(phase, projection),
+                shadowWidthBlocks / 2.0);
     }
 
     private EdgeSample sampleForDistance(double distanceFromPanelCenter) {
@@ -219,6 +245,16 @@ public final class RingworldSunshade {
         double cyclePosition = centeredTicks / (double) cycleTicks;
         double panelCenter = centeredModulo(phaseOffsetBlocks + spacingBlocks * cyclePosition, spacingBlocks);
         double relativeProjection = projection - panelCenter;
+        requireFinite("relativeProjection", relativeProjection);
+        double offsetWithinPeriod = Math.abs(relativeProjection % spacingBlocks);
+        return Math.min(offsetWithinPeriod, spacingBlocks - offsetWithinPeriod);
+    }
+
+    private double evaluateDistanceFromPanelCenter(Phase phase, double projection) {
+        if (shadowWidthBlocks == 0.0 || shadowWidthBlocks == spacingBlocks) {
+            return 0.0;
+        }
+        double relativeProjection = projection - phase.panelCenterBlocks();
         requireFinite("relativeProjection", relativeProjection);
         double offsetWithinPeriod = Math.abs(relativeProjection % spacingBlocks);
         return Math.min(offsetWithinPeriod, spacingBlocks - offsetWithinPeriod);

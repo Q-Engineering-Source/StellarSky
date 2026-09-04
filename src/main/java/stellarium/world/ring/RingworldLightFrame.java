@@ -24,7 +24,7 @@ public record RingworldLightFrame(RingworldSunshade sunshade,
 
     /** The top face is exclusive: receivers at it and above are sun-facing. */
     public int sunshadeUpperFaceY() {
-        return Math.addExact(sunshadeHeightBlocks, sunshadeThicknessBlocks);
+        return RingworldPackedLight.upperFaceY(sunshadeHeightBlocks, sunshadeThicknessBlocks);
     }
 
     /**
@@ -59,9 +59,9 @@ public record RingworldLightFrame(RingworldSunshade sunshade,
         if (y < 0 || y >= sunshadeUpperFaceY()) {
             return originalPackedLight;
         }
-        int rawSky = (originalPackedLight >>> 20) & 15;
+        int rawSky = RingworldPackedLight.sky(originalPackedLight);
         int sky = effectiveSkyLight(rawSky, 0, x, y, z);
-        return (originalPackedLight & ~0x00F00000) | (sky << 20);
+        return RingworldPackedLight.withSky(originalPackedLight, sky);
     }
 
     private static int lightLevel(int value) {

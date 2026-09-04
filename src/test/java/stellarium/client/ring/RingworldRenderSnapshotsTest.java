@@ -5,6 +5,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -14,6 +15,7 @@ import org.junit.Test;
 import stellarium.world.ring.RingworldClockMirror;
 import stellarium.world.ring.RingworldClockSample;
 import stellarium.world.ring.RingworldDisplaySnapshot;
+import stellarium.world.ring.RingworldDisplayLightField;
 import stellarium.world.ring.RingworldRenderObserver;
 import stellarium.world.ring.RingworldSunshade;
 
@@ -68,9 +70,33 @@ public class RingworldRenderSnapshotsTest {
             RingworldRenderSnapshots.captureOnce(() -> { captures.incrementAndGet(); return null; });
             assertSame(frozen, RingworldRenderSnapshots.current());
             assertSame(frozen.observer(), RingworldRenderSnapshots.current().observer());
+            assertSame(frozen, RingworldRenderSnapshots.currentDisplayLightFieldFor(
+                    frozen.world(), frozen.scene()).snapshot());
         });
         assertEquals(1, captures.get());
         assertNull(RingworldRenderSnapshots.current());
+    }
+
+    @Test
+    public void displayLightFieldRequiresTheCurrentWorldAndSceneAndDoesNotLeakThroughNestedScopes() {
+        Object world = new Object();
+        Object scene = new Object();
+        RingworldDisplaySnapshot outer = snapshot(world, scene);
+        RingworldRenderSnapshots.withSnapshot(() -> outer, () -> {
+            assertTrue(RingworldRenderSnapshots.isScopeActive());
+            RingworldDisplayLightField field = RingworldRenderSnapshots.currentDisplayLightFieldFor(world, scene);
+            assertSame(outer, field.snapshot());
+            assertSame(field, RingworldRenderSnapshots.currentDisplayLightFieldFor(world));
+            assertNull(RingworldRenderSnapshots.currentDisplayLightFieldFor(new Object(), scene));
+            assertNull(RingworldRenderSnapshots.currentDisplayLightFieldFor(new Object()));
+            assertNull(RingworldRenderSnapshots.currentDisplayLightFieldFor(world, new Object()));
+            RingworldRenderSnapshots.withSnapshot(() -> null, () -> {
+                assertTrue(RingworldRenderSnapshots.isScopeActive());
+                assertNull(RingworldRenderSnapshots.currentDisplayLightFieldFor(world, scene));
+            });
+            assertSame(field, RingworldRenderSnapshots.currentDisplayLightFieldFor(world, scene));
+        });
+        assertFalse(RingworldRenderSnapshots.isScopeActive());
     }
 
     @Test

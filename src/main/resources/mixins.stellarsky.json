@@ -23,6 +23,8 @@
     "MixinEntityRendererRingworldBoard",
     "MixinKirinoRingworldBoard",
     "MixinWorldRingCombinedLight",
-    "MixinChunkCacheRingLighting"
+    "MixinVboRenderListRingworldTerrainLightmap",
+    "MixinRenderListRingworldTerrainLightmap",
+    "MixinChunkRenderContainerRingworldTerrainLightmap"
   ]
 }

@@ -7,6 +7,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.world.World;
 import stellarium.world.StellarScene;
 import stellarium.world.ring.RingworldDisplaySnapshot;
+import stellarium.world.ring.RingworldDisplayLightField;
 import stellarium.world.ring.RingworldRenderObserver;
 
 /** Client render-entry scope for one immutable ringworld display snapshot. */
@@ -55,12 +56,38 @@ public final class RingworldRenderSnapshots {
         return snapshot != null && snapshot.world() == world && snapshot.scene() == scene ? snapshot : null;
     }
 
+    /**
+     * Returns the one field frozen with this render only for its exact scene identity.
+     * A nested, empty, or mismatched scope must not leak its caller's display field.
+     */
+    public static RingworldDisplayLightField currentDisplayLightFieldFor(Object world, Object scene) {
+        Scope scope = CURRENT.get();
+        return scope != null && scope.snapshot != null && scope.snapshot.world() == world && scope.snapshot.scene() == scene
+                ? scope.displayLightField : null;
+    }
+
+    /**
+     * Hot-path lookup for a scope whose scene identity was already frozen during capture.
+     * Client rendering and scheduled scene replacement share one thread, so no mutable
+     * capability lookup is needed for each receiver light query.
+     */
+    public static RingworldDisplayLightField currentDisplayLightFieldFor(Object world) {
+        Scope scope = CURRENT.get();
+        return scope != null && scope.snapshot != null && scope.snapshot.world() == world
+                ? scope.displayLightField : null;
+    }
+
+    /** Distinguishes an active but unusable render scope from ordinary non-render callers. */
+    public static boolean isScopeActive() {
+        return CURRENT.get() != null;
+    }
+
     /** Freezes one result, including an absent snapshot, across all passes in this render. */
     public static void captureOnce(Supplier<RingworldDisplaySnapshot> capture) {
         Scope scope = CURRENT.get();
         if (scope == null || scope.initialized) return;
         RingworldDisplaySnapshot snapshot = capture.get();
-        scope.snapshot = snapshot;
+        scope.setSnapshot(snapshot);
         scope.initialized = true;
     }
 
@@ -82,11 +109,17 @@ public final class RingworldRenderSnapshots {
 
     private static final class Scope {
         private RingworldDisplaySnapshot snapshot;
+        private RingworldDisplayLightField displayLightField;
         private boolean initialized;
 
         private Scope(RingworldDisplaySnapshot snapshot, boolean initialized) {
-            this.snapshot = snapshot;
+            setSnapshot(snapshot);
             this.initialized = initialized;
+        }
+
+        private void setSnapshot(RingworldDisplaySnapshot snapshot) {
+            this.snapshot = snapshot;
+            this.displayLightField = snapshot == null ? null : new RingworldDisplayLightField(snapshot);
         }
     }
 }
