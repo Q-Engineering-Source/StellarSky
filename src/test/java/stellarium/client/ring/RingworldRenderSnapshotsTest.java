@@ -1,5 +1,9 @@
 package stellarium.client.ring;
 
+import stellarium.client.ring.dh.DistantHorizonsDepthBridge;
+import stellarium.client.ring.dh.DistantHorizonsFrameCoverage;
+import stellarium.client.ring.actinium.ActiniumLocalLightUniforms;
+
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
@@ -20,6 +24,23 @@ import stellarium.world.ring.RingworldRenderObserver;
 import stellarium.world.ring.RingworldSunshade;
 
 public class RingworldRenderSnapshotsTest {
+    @Test public void nearLightingUsesOpticalFrameWhileNearCurvatureStaysDisabled() {
+        Object world = new Object(), scene = new Object();
+        var snapshot = snapshot(world, scene);
+        float[] identity = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        var frame = new RingworldCurvatureFrame(world, scene, snapshot.observer(),
+                149597870700.0, identity, identity, 0, 0, 800, 600);
+        RingworldRenderSnapshots.withSnapshot(() -> snapshot, () -> {
+            RingworldRenderSnapshots.captureOpticalFrame(frame);
+            assertNull(RingworldRenderSnapshots.currentCurvatureFrameFor(world, scene));
+            assertSame(frame, ActiniumLocalLightUniforms.currentLightingFrame());
+            RingworldRenderSnapshots.withSnapshot(() -> null, () ->
+                    assertNull(ActiniumLocalLightUniforms.currentLightingFrame()));
+            assertSame(frame, ActiniumLocalLightUniforms.currentLightingFrame());
+            RingworldRenderSnapshots.clearCurvatureFrame();
+            assertNull(ActiniumLocalLightUniforms.currentLightingFrame());
+        });
+    }
     @Test
     public void emptyMaterialDoesNotInitializeMinecraftOrQueryAnOpenGlContext() {
         RingworldDisplaySnapshot sample = snapshot(new Object(), new Object());
@@ -182,6 +203,103 @@ public class RingworldRenderSnapshotsTest {
             assertNull(RingworldRenderSnapshots.currentFor(new Object(), scene));
         });
         assertNull(RingworldRenderSnapshots.current());
+    }
+
+    @Test
+    public void frameOpticsFreezeOnceAndDoNotLeakAcrossNestedScopes() {
+        Object world = new Object();
+        Object scene = new Object();
+        RingworldDisplaySnapshot snapshot = snapshot(world, scene);
+        RingworldRenderSnapshots.withSnapshot(() -> snapshot, () -> {
+            RingworldRenderSnapshots.captureFrameOptics(true, false);
+            RingworldSpatialAirFrameOptics outer = RingworldRenderSnapshots.currentFrameOpticsFor(world, scene);
+            assertTrue(outer.usesSpatialAir());
+            RingworldRenderSnapshots.captureFrameOptics(false, true);
+            assertSame(outer, RingworldRenderSnapshots.currentFrameOpticsFor(world, scene));
+            RingworldRenderSnapshots.withSnapshot(() -> null, () ->
+                    assertNull(RingworldRenderSnapshots.currentFrameOpticsFor(world, scene)));
+            assertSame(outer, RingworldRenderSnapshots.currentFrameOpticsFor(world, scene));
+        });
+        assertNull(RingworldRenderSnapshots.currentFrameOpticsFor(world, scene));
+    }
+
+	@Test
+	public void missingSnapshotFreezesLegacyDecisionWithoutLeakingAnOuterOpticsState() {
+		Object world = new Object();
+		Object scene = new Object();
+		RingworldDisplaySnapshot outer = snapshot(world, scene);
+		RingworldRenderSnapshots.withSnapshot(() -> outer, () -> {
+			RingworldRenderSnapshots.captureFrameOptics(true, false, true);
+			assertTrue(RingworldRenderSnapshots.currentFrameOpticsFor(world, scene).usesSpatialAir());
+			RingworldRenderSnapshots.withSnapshot(() -> null, () -> {
+				RingworldRenderSnapshots.captureFrameOptics(true, false, true);
+				assertNull(RingworldRenderSnapshots.currentFrameOpticsFor(world, scene));
+			});
+			assertTrue(RingworldRenderSnapshots.currentFrameOpticsFor(world, scene).usesSpatialAir());
+		});
+	}
+
+    @Test
+    public void curvatureAdmissionIsOpticalPassLocalAndRestoresNestedWorldScope() {
+        Object world = new Object(), scene = new Object();
+        RingworldDisplaySnapshot snapshot = snapshot(world, scene);
+        float[] identity = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        RingworldCurvatureFrame frame = new RingworldCurvatureFrame(world, scene, snapshot.observer(),
+                149597870700.0, identity, identity, 0, 0, 800, 600);
+        RingworldRenderSnapshots.withSnapshot(() -> snapshot, () -> {
+            assertNull(RingworldRenderSnapshots.currentCurvatureFrameFor(world, scene));
+            RingworldRenderSnapshots.publishCurvatureFrame(frame);
+            assertSame(frame, RingworldRenderSnapshots.currentCurvatureFrameFor(world, scene));
+            assertNull(RingworldRenderSnapshots.currentCurvatureFrameFor(new Object(), scene));
+            RingworldRenderSnapshots.withSnapshot(() -> null, () -> {
+                assertNull(RingworldRenderSnapshots.currentCurvatureFrameFor(world, scene));
+                assertThrows(IllegalStateException.class, () -> RingworldRenderSnapshots.publishCurvatureFrame(frame));
+            });
+            assertSame(frame, RingworldRenderSnapshots.currentCurvatureFrameFor(world, scene));
+            RingworldRenderSnapshots.clearCurvatureFrame();
+            assertNull(RingworldRenderSnapshots.currentCurvatureFrameFor(world, scene));
+        });
+        assertNull(RingworldRenderSnapshots.currentCurvatureFrameFor(world, scene));
+        assertThrows(IllegalStateException.class, () -> RingworldRenderSnapshots.publishCurvatureFrame(frame));
+    }
+
+    @Test
+    public void distantGeometryPublishesWithoutEnablingNearTerrainAndMasksNestedScopes() {
+        Object world = new Object(), scene = new Object();
+        RingworldDisplaySnapshot snapshot = snapshot(world, scene);
+        float[] identity = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        RingworldCurvatureFrame frame = new RingworldCurvatureFrame(world, scene, snapshot.observer(),
+                149597870700.0, identity, identity, 0, 0, 800, 600);
+        RingworldRenderSnapshots.withSnapshot(() -> snapshot, () -> {
+            RingworldRenderSnapshots.publishDistantCurvatureFrame(frame);
+            assertSame(frame, RingworldRenderSnapshots.currentDistantCurvatureFrameFor(world, scene));
+            assertNull(RingworldRenderSnapshots.currentDistantCurvatureFrameFor(new Object(), scene));
+            assertNull(RingworldRenderSnapshots.currentCurvatureFrameFor(world, scene));
+            var depth = DistantHorizonsDepthBridge.capture(frame, 7, identity,
+                    0, 0, 800, 600, 0, 0, 0);
+            var view = new Object();
+            var coverage = new DistantHorizonsFrameCoverage.Snapshot(frame, view,
+                    new DistantHorizonsFrameCoverage(world, frame, view, 8));
+            RingworldRenderSnapshots.captureDistantCoverage(coverage);
+            assertSame(coverage, RingworldRenderSnapshots.currentDistantCoverage());
+            RingworldRenderSnapshots.withSnapshot(() -> null, () -> {
+                assertNull(RingworldRenderSnapshots.currentDistantCurvatureFrame());
+                assertNull(DistantHorizonsDepthBridge.current());
+                assertNull(RingworldRenderSnapshots.currentDistantCoverage());
+                RingworldRenderSnapshots.captureDistantCoverage(null);
+                DistantHorizonsDepthBridge.clear();
+                assertThrows(IllegalStateException.class, () -> RingworldRenderSnapshots.publishDistantCurvatureFrame(frame));
+            });
+            assertSame(depth, DistantHorizonsDepthBridge.current());
+            assertSame(coverage, RingworldRenderSnapshots.currentDistantCoverage());
+            assertSame(frame, RingworldRenderSnapshots.currentDistantCurvatureFrame());
+            RingworldRenderSnapshots.clearCurvatureFrame();
+            assertNull(RingworldRenderSnapshots.currentDistantCurvatureFrame());
+            assertNull(RingworldRenderSnapshots.currentDistantCoverage());
+            RingworldRenderSnapshots.publishDistantCurvatureFrame(frame);
+            assertNull(RingworldRenderSnapshots.currentDistantCoverage());
+        });
+        assertNull(RingworldRenderSnapshots.currentDistantCurvatureFrame());
     }
 
     private static RingworldDisplaySnapshot snapshot(Object world, Object scene) {

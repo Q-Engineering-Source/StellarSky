@@ -13,7 +13,8 @@ public record RingworldDisplaySnapshot(Object world,
                                        int sunshadeThicknessBlocks,
                                        RingworldRenderObserver observer,
                                        double atmosphereFade,
-                                       double atmosphereGeometryHeight) {
+                                       double atmosphereGeometryHeight,
+                                       RingworldAirProfile airProfile) {
     public RingworldDisplaySnapshot {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(scene, "scene");
@@ -22,6 +23,7 @@ public record RingworldDisplaySnapshot(Object world,
             throw new IllegalArgumentException("Clock endpoints and phase must be present or absent together");
         }
         Objects.requireNonNull(observer, "observer");
+        Objects.requireNonNull(airProfile, "airProfile");
         if (!Double.isFinite(atmosphereFade) || atmosphereFade < 0.0 || atmosphereFade > 1.0
                 || !Double.isFinite(atmosphereGeometryHeight) || atmosphereGeometryHeight < 0.0) {
             throw new IllegalArgumentException("Invalid frozen ringworld atmosphere input");
@@ -32,5 +34,20 @@ public record RingworldDisplaySnapshot(Object world,
                 || (!sunshade.isEmpty() && (long) sunshadeHeightBlocks + sunshadeThicknessBlocks > (1L << 24))) {
             throw new IllegalArgumentException("GLSL board rendering requires an upper face within 16777216 blocks");
         }
+    }
+
+    /** Compatibility construction for existing consumers with the product defaults. */
+    public RingworldDisplaySnapshot(Object world,
+                                    Object scene,
+                                    @Nullable RingworldClockMirror.DisplayTime displayTime,
+                                    RingworldSunshade sunshade,
+                                    @Nullable RingworldSunshade.Phase phase,
+                                    int sunshadeHeightBlocks,
+                                    int sunshadeThicknessBlocks,
+                                    RingworldRenderObserver observer,
+                                    double atmosphereFade,
+                                    double atmosphereGeometryHeight) {
+        this(world, scene, displayTime, sunshade, phase, sunshadeHeightBlocks, sunshadeThicknessBlocks, observer,
+                atmosphereFade, atmosphereGeometryHeight, RingworldThinAtmosphere.defaultProfile());
     }
 }

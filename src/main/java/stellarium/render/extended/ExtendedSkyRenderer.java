@@ -12,6 +12,7 @@ import stellarapi.api.lib.math.Vector3;
 import stellarapi.api.optics.Wavelength;
 import stellarium.StellarSky;
 import stellarium.StellarSkyResources;
+import stellarium.build.StellarBuildProfile;
 import stellarium.client.ClientSettings;
 import stellarium.client.SkyRendererMode;
 import stellarium.client.overlay.objectinfo.CelestialNameCatalog;
@@ -48,10 +49,11 @@ public enum ExtendedSkyRenderer {
 			return;
 
 		try {
+			boolean includeDeepSky = StellarBuildProfile.INCLUDE_DEEP_SKY && !settings.lowPowerRenderer;
 			this.starShader = ShaderHelper.getInstance().buildShader("extended_stars",
 					StellarSkyResources.vertexExtendedStar,
 					StellarSkyResources.fragmentExtendedStar);
-			if(!settings.lowPowerRenderer) {
+			if(includeDeepSky) {
 				this.deepSkyShader = ShaderHelper.getInstance().buildShader("extended_deep_sky",
 						StellarSkyResources.vertexExtendedDeepSky,
 						StellarSkyResources.fragmentExtendedDeepSky);
@@ -64,7 +66,7 @@ public enum ExtendedSkyRenderer {
 						StellarSkyResources.vertexExtendedDeepSkyImage,
 						StellarSkyResources.fragmentExtendedMilkyWay);
 			}
-			if(starShader == null || (!settings.lowPowerRenderer
+			if(starShader == null || (includeDeepSky
 					&& (deepSkyShader == null || deepSkyImageShader == null
 							|| milkyWayShader == null)))
 				throw new IOException("Extended sky shader compilation failed");
@@ -74,7 +76,7 @@ public enum ExtendedSkyRenderer {
 				stars = ExtendedCatalogueLoader.loadStars(settings.extendedStarMagnitudeLimit);
 				loadedStarLimit = settings.extendedStarMagnitudeLimit;
 			}
-			if(!settings.lowPowerRenderer) {
+			if(includeDeepSky) {
 				if(deepSky == null
 						|| loadedDeepSkyLimit != settings.extendedDeepSkyMagnitudeLimit) {
 					delete(deepSky);
@@ -146,7 +148,7 @@ public enum ExtendedSkyRenderer {
 			}
 		}
 
-		if(deepSky != null && deepSky.query != null) {
+		if(StellarBuildProfile.INCLUDE_DEEP_SKY && deepSky != null && deepSky.query != null) {
 			ExtendedCatalogueLoader.DeepSkyQueryIndex index = deepSky.query;
 			for(int object = 0; object < index.size(); object++) {
 				int base = object * 7;
@@ -216,7 +218,7 @@ public enum ExtendedSkyRenderer {
 
 		boolean cullEnabled = GL11.glIsEnabled(GL11.GL_CULL_FACE);
 		Matrix3 catalogueToGround = new Matrix3(
-				info.info.coordinate.getProjectionToGround())
+				info.info.backgroundProjectionToGround)
 				.postMult(EQUATORIAL_TO_ECLIPTIC);
 		GlStateManager.pushMatrix();
 		GL11.glMultMatrix(toOpenGlMatrix(catalogueToGround));
@@ -224,9 +226,9 @@ public enum ExtendedSkyRenderer {
 			// Minecraft enters sky rendering with face culling enabled. The
 			// catalogue meshes are viewed from inside the celestial sphere.
 			GlStateManager.disableCull();
-			if(!settings.lowPowerRenderer && settings.renderMilkyWay)
+			if(StellarBuildProfile.INCLUDE_DEEP_SKY && !settings.lowPowerRenderer && settings.renderMilkyWay)
 				renderMilkyWay(settings);
-			if(!settings.lowPowerRenderer && settings.renderDeepSky) {
+			if(StellarBuildProfile.INCLUDE_DEEP_SKY && !settings.lowPowerRenderer && settings.renderDeepSky) {
 				if(settings.renderDeepSkyImages)
 					renderDeepSkyImages();
 				if(settings.renderDeepSkyCatalog)

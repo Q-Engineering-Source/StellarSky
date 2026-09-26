@@ -56,7 +56,7 @@ public class EcGridCache implements IDisplayCache<EcGridSettings> {
 		for(int longc=0; longc<longn; longc++){
 			if(this.eclipticEnabled) {
 				Buf.set(new SpCoord(-longc*360.0/longn, 0.0).getVec());
-				info.projectionToGround.transform(Buf);
+				info.backgroundProjectionToGround.transform(Buf);
 				rawEcliptic[longc].set(Buf).normalize();
 
 				coord = new SpCoord();
@@ -70,7 +70,7 @@ public class EcGridCache implements IDisplayCache<EcGridSettings> {
 			if(this.gridEnabled) {
 				for(int latc=0; latc<=latn; latc++){
 					Buf.set(new SpCoord(-longc*360.0/longn, latc*180.0/latn - 90.0).getVec());
-					info.projectionToGround.transform(Buf);
+					info.backgroundProjectionToGround.transform(Buf);
 					rawDisplayvec[longc][latc].set(Buf).normalize();
 
 					coord = new SpCoord();

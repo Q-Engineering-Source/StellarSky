@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "stellarium.mixin.dh",
+  "refmap": "mixins.stellarsky.refmap.json",
+  "target": "@env(DEFAULT)",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [],
+  "client": [
+    "MixinDistantHorizonsAntiAliasingConfig",
+    "MixinDistantHorizonsIrisBinding",
+    "MixinDistantHorizonsCoverageTree",
+    "MixinDistantHorizonsCoverageSection",
+    "MixinDistantHorizonsCoverageBuffer",
+    "MixinDistantHorizonsCoverageRender",
+    "MixinDistantHorizonsCoverageDraw",
+    "MixinDistantHorizonsCoverageComposite",
+    "MixinDistantHorizonsCoverageCopy"
+  ]
+}

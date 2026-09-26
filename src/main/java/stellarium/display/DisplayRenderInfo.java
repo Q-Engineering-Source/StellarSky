@@ -5,6 +5,7 @@ import net.minecraft.client.renderer.BufferBuilder;
 import net.minecraft.client.renderer.Tessellator;
 import stellarapi.api.lib.math.Vector3;
 import stellarium.client.ring.RingworldRenderSnapshots;
+import stellarium.client.ring.RingworldSpatialAirFrameOptics;
 import stellarium.world.StellarScene;
 import stellarium.world.ring.RingworldDisplaySnapshot;
 
@@ -34,7 +35,10 @@ public class DisplayRenderInfo {
 		this.isPostCelesitals = isPostCelesitals;
 		RingworldDisplaySnapshot snapshot = mc.world == null ? null
 				: RingworldRenderSnapshots.currentFor(mc.world, StellarScene.getScene(mc.world));
-		this.atmosphereFade = snapshot == null ? 1.0 : snapshot.atmosphereFade();
+		RingworldSpatialAirFrameOptics optics = mc.world == null ? null
+				: RingworldRenderSnapshots.currentFrameOpticsFor(mc.world, StellarScene.getScene(mc.world));
+		this.atmosphereFade = optics == null ? (snapshot == null ? 1.0 : snapshot.atmosphereFade())
+				: optics.legacyAtmosphereFade();
 	}
 
 	/**

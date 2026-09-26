@@ -16,6 +16,27 @@ import net.minecraftforge.common.config.Property;
 public class RingworldSettingsTest {
 
     @Test
+    public void configuredFeatherControlsTheActualTransitionAndSurvivesNbt() {
+        Configuration config = new Configuration();
+        RingworldSettings settings = new RingworldSettings();
+        settings.setupConfig(config, "ringworld");
+        config.get("ringworld", "Enabled", false).set(true);
+        Property feather = config.get("ringworld", "Feather_Blocks", 627750.0);
+        assertTrue(feather.requiresWorldRestart());
+        feather.set(9300.0);
+        settings.loadFromConfig(config, "ringworld");
+        NBTTagCompound saved = new NBTTagCompound();
+        settings.writeToNBT(saved);
+        assertEquals(9300.0, saved.getDouble("featherBlocks"), 0.0);
+        RingworldSettings restored = new RingworldSettings();
+        restored.readFromNBT(saved);
+        double edgeX = 10_044_000.0;
+        assertEquals(1.0, restored.sunshade().transmittance(0L, edgeX, 0), 0.0);
+        assertEquals(0.5, restored.sunshade().transmittance(200L, edgeX, 0), 1e-12);
+        assertEquals(0.0, restored.sunshade().transmittance(400L, edgeX, 0), 0.0);
+    }
+
+    @Test
     public void newEnabledConfigurationMovesAt465MetersPerSecondOverATwentyFourHourCycle() {
         Configuration config = new Configuration();
         RingworldSettings settings = new RingworldSettings();
@@ -32,53 +53,113 @@ public class RingworldSettingsTest {
     }
 
     @Test
-    public void newBoardUsesTheSlowGroundViewEngineeringHeightWithoutChangingThickness() {
+    public void newBoardUsesTheSlowGroundViewEngineeringHeightAndThirtyTwoBlockDefaultThickness() {
         RingworldSettings settings = new RingworldSettings();
         Configuration config = new Configuration();
         settings.setupConfig(config, "ringworld");
         settings.loadFromConfig(config, "ringworld");
         assertEquals(6_400_000, settings.sunshadeHeightBlocks());
-        assertEquals(8, settings.sunshadeThicknessBlocks());
+        assertEquals(32, settings.sunshadeThicknessBlocks());
         // A legacy scene explicitly stored its prototype height and must keep it.
         settings.readFromNBT(schemaTwoTag(512, 8));
         assertEquals(512, settings.sunshadeHeightBlocks());
     }
 
     @Test
-    public void configurationExposesTheThinAtmosphereFadeStartAsAWorldRestartSetting() {
+    public void newConfigurationExposesTheFullDefaultAtmosphereProfileAsWorldRestartSettings() {
         Configuration config = new Configuration();
         RingworldSettings settings = new RingworldSettings();
         settings.setupConfig(config, "ringworld");
-        Property property = config.get("ringworld", "Thin_Atmosphere_Fade_Start_Y", 192.0);
-        assertTrue(property.requiresWorldRestart());
-        assertEquals(192.0, property.getDouble(), 0.0);
+        Property fadeStart = config.get("ringworld", "Thin_Atmosphere_Fade_Start_Y", 384.0);
+        Property lower = config.get("ringworld", "Atmosphere_Lower_Y", 0.0);
+        Property upper = config.get("ringworld", "Atmosphere_Upper_Y", 512.0);
+        assertTrue(fadeStart.requiresWorldRestart());
+        assertTrue(lower.requiresWorldRestart());
+        assertTrue(upper.requiresWorldRestart());
+        assertEquals(384.0, fadeStart.getDouble(), 0.0);
+        assertEquals(0.0, lower.getDouble(), 0.0);
+        assertEquals(512.0, upper.getDouble(), 0.0);
 
-        property.set(200.0);
+        lower.set(24.0);
+        fadeStart.set(400.0);
+        upper.set(640.0);
         settings.loadFromConfig(config, "ringworld");
 
-        assertEquals(200.0, settings.thinAtmosphereFadeStartY(), 0.0);
+        assertEquals(400.0, settings.thinAtmosphereFadeStartY(), 0.0);
+        assertEquals(24.0, settings.atmosphereProfile().lowerY(), 0.0);
+        assertEquals(640.0, settings.atmosphereProfile().upperY(), 0.0);
         Configuration savedConfig = new Configuration();
         settings.setupConfig(savedConfig, "ringworld");
         settings.saveToConfig(savedConfig, "ringworld");
-        assertEquals(200.0, savedConfig.get("ringworld", "Thin_Atmosphere_Fade_Start_Y", 192.0).getDouble(), 0.0);
+        assertEquals(400.0, savedConfig.get("ringworld", "Thin_Atmosphere_Fade_Start_Y", 384.0).getDouble(), 0.0);
+        assertEquals(24.0, savedConfig.get("ringworld", "Atmosphere_Lower_Y", 0.0).getDouble(), 0.0);
+        assertEquals(640.0, savedConfig.get("ringworld", "Atmosphere_Upper_Y", 512.0).getDouble(), 0.0);
     }
 
     @Test
-    public void schemasOneAndTwoMigrateTheThinAtmosphereFadeStartWithoutChangingLegacyGeometry() {
+    public void preAirBoundsConfigurationMigratesItsExistingFadeToTheLegacyProfile() {
+        Configuration config = new Configuration();
+        RingworldSettings settings = new RingworldSettings();
+        // This fixture represents a parsed pre-air-bounds config: it has old
+        // ringworld values, but neither of the later air-bound keys.
+        config.get("ringworld", "Enabled", false).set(true);
+        config.get("ringworld", "Thin_Atmosphere_Fade_Start_Y", 384.0).set(192.0);
+        settings.setupConfig(config, "ringworld");
+        assertEquals(0.0, config.get("ringworld", "Atmosphere_Lower_Y", 0.0).getDouble(), 0.0);
+        assertEquals(256.0, config.get("ringworld", "Atmosphere_Upper_Y", 512.0).getDouble(), 0.0);
+
+        settings.loadFromConfig(config, "ringworld");
+
+        assertEquals(0.0, settings.atmosphereProfile().lowerY(), 0.0);
+        assertEquals(192.0, settings.atmosphereProfile().fullDensityTopY(), 0.0);
+        assertEquals(256.0, settings.atmosphereProfile().upperY(), 0.0);
+    }
+
+    @Test
+    public void partialAirBoundsKeepExplicitValuesAndUseNewDefaultsOnlyForMissingSides() {
+        Configuration onlyUpper = new Configuration();
+        onlyUpper.get("ringworld", "Thin_Atmosphere_Fade_Start_Y", 384.0).set(192.0);
+        onlyUpper.get("ringworld", "Atmosphere_Upper_Y", 512.0).set(640.0);
+        RingworldSettings upperSettings = new RingworldSettings();
+        upperSettings.setupConfig(onlyUpper, "ringworld");
+        upperSettings.loadFromConfig(onlyUpper, "ringworld");
+        assertEquals(0.0, upperSettings.atmosphereProfile().lowerY(), 0.0);
+        assertEquals(192.0, upperSettings.atmosphereProfile().fullDensityTopY(), 0.0);
+        assertEquals(640.0, upperSettings.atmosphereProfile().upperY(), 0.0);
+
+        Configuration onlyLower = new Configuration();
+        onlyLower.get("ringworld", "Thin_Atmosphere_Fade_Start_Y", 384.0).set(192.0);
+        onlyLower.get("ringworld", "Atmosphere_Lower_Y", 0.0).set(16.0);
+        RingworldSettings lowerSettings = new RingworldSettings();
+        lowerSettings.setupConfig(onlyLower, "ringworld");
+        lowerSettings.loadFromConfig(onlyLower, "ringworld");
+        assertEquals(16.0, lowerSettings.atmosphereProfile().lowerY(), 0.0);
+        assertEquals(192.0, lowerSettings.atmosphereProfile().fullDensityTopY(), 0.0);
+        assertEquals(512.0, lowerSettings.atmosphereProfile().upperY(), 0.0);
+    }
+
+    @Test
+    public void schemasOneAndTwoMigrateToTheLegacyAirProfileWithoutChangingLegacyGeometry() {
         RingworldSettings settings = new RingworldSettings();
         settings.readFromNBT(enabledTag());
         assertEquals(512, settings.sunshadeHeightBlocks());
         assertEquals(192.0, settings.thinAtmosphereFadeStartY(), 0.0);
+        assertEquals(0.0, settings.atmosphereProfile().lowerY(), 0.0);
+        assertEquals(256.0, settings.atmosphereProfile().upperY(), 0.0);
 
         settings.readFromNBT(schemaTwoTag(768, 12));
         assertEquals(768, settings.sunshadeHeightBlocks());
         assertEquals(192.0, settings.thinAtmosphereFadeStartY(), 0.0);
+        assertEquals(0.0, settings.atmosphereProfile().lowerY(), 0.0);
+        assertEquals(256.0, settings.atmosphereProfile().upperY(), 0.0);
 
         NBTTagCompound saved = new NBTTagCompound();
         settings.writeToNBT(saved);
-        assertEquals(3, saved.getInteger("schemaVersion"));
+        assertEquals(5, saved.getInteger("schemaVersion"));
         assertTrue(saved.hasKey("thinAtmosphereFadeStartY", 6));
         assertEquals(192.0, saved.getDouble("thinAtmosphereFadeStartY"), 0.0);
+        assertEquals(0.0, saved.getDouble("atmosphereLowerY"), 0.0);
+        assertEquals(256.0, saved.getDouble("atmosphereUpperY"), 0.0);
     }
 
     @Test
@@ -123,8 +204,14 @@ public class RingworldSettingsTest {
         RingworldSettings settings = new RingworldSettings();
 
         assertNull(settings.sunshade());
+        assertEquals(0.0, settings.atmosphereProfile().lowerY(), 0.0);
+        assertEquals(384.0, settings.atmosphereProfile().fullDensityTopY(), 0.0);
+        assertEquals(512.0, settings.atmosphereProfile().upperY(), 0.0);
         settings.readFromNBT(new NBTTagCompound());
         assertNull(settings.sunshade());
+        assertEquals(0.0, settings.atmosphereProfile().lowerY(), 0.0);
+        assertEquals(384.0, settings.atmosphereProfile().fullDensityTopY(), 0.0);
+        assertEquals(512.0, settings.atmosphereProfile().upperY(), 0.0);
     }
 
     @Test
@@ -148,7 +235,7 @@ public class RingworldSettingsTest {
     }
 
     @Test
-    public void schemaOneMigratesToTheCuboidGeometryAndSchemaThreePersistsBothFaces() {
+    public void schemaOneMigratesToTheCuboidGeometryAndSchemaFourPersistsBothFaces() {
         RingworldSettings settings = new RingworldSettings();
         settings.readFromNBT(enabledTag());
 
@@ -157,7 +244,7 @@ public class RingworldSettingsTest {
 
         NBTTagCompound schemaTwo = new NBTTagCompound();
         settings.writeToNBT(schemaTwo);
-        assertEquals(3, schemaTwo.getInteger("schemaVersion"));
+        assertEquals(5, schemaTwo.getInteger("schemaVersion"));
         assertTrue(schemaTwo.hasKey("sunshadeHeightBlocks", 3));
         assertEquals(512, schemaTwo.getInteger("sunshadeHeightBlocks"));
         assertTrue(schemaTwo.hasKey("sunshadeThicknessBlocks", 3));
@@ -209,6 +296,7 @@ public class RingworldSettingsTest {
         config.get("ringworld", "Phase_Offset_Blocks", 0.0).set(2.0);
         config.get("ringworld", "Heading_Degrees", 0.0).set(0.0);
         config.get("ringworld", "Feather_Blocks", 4.0).set(2.0);
+        config.get("ringworld", "Side_Feather_Blocks", 128.0).set(64.0);
         config.get("ringworld", "Sunshade_Height_Blocks", 512).set(768);
         config.get("ringworld", "Sunshade_Thickness_Blocks", 8).set(12);
 
@@ -217,6 +305,7 @@ public class RingworldSettingsTest {
         assertNotNull(settings.sunshade());
         assertEquals(768, settings.sunshadeHeightBlocks());
         assertEquals(12, settings.sunshadeThicknessBlocks());
+        assertEquals(64.0, settings.sunshade().sideFeatherBlocks(), 0.0);
         assertEquals(0.0, settings.sunshade().transmittance(0L, 2.0, 0.0), 0.0);
         assertEquals(0.5, settings.sunshade().transmittance(0L, 6.0, 0.0), 0.0);
         assertEquals(true, config.getCategory("ringworld").requiresWorldRestart());
@@ -238,6 +327,7 @@ public class RingworldSettingsTest {
         assertEquals(2.0, config.get("ringworld", "Phase_Offset_Blocks", 0.0).getDouble(), 0.0);
         assertEquals(0.0, config.get("ringworld", "Heading_Degrees", 1.0).getDouble(), 0.0);
         assertEquals(2.0, config.get("ringworld", "Feather_Blocks", 4.0).getDouble(), 0.0);
+        assertEquals(0.0, config.get("ringworld", "Side_Feather_Blocks", 128.0).getDouble(), 0.0);
         assertEquals(512, config.get("ringworld", "Sunshade_Height_Blocks", 512).getInt());
         assertEquals(8, config.get("ringworld", "Sunshade_Thickness_Blocks", 8).getInt());
     }
@@ -249,7 +339,7 @@ public class RingworldSettingsTest {
         RingworldSunshade accepted = settings.sunshade();
 
         NBTTagCompound unknownSchema = enabledTag();
-        unknownSchema.setInteger("schemaVersion", 3);
+        unknownSchema.setInteger("schemaVersion", 6);
         assertThrows(IllegalArgumentException.class, () -> settings.readFromNBT(unknownSchema));
         assertSame(accepted, settings.sunshade());
 
@@ -356,6 +446,116 @@ public class RingworldSettingsTest {
         assertSame(accepted, settings.sunshade());
     }
 
+    @Test
+    public void sideFeatherIsAWorldRestartConfigFieldAndRoundTripsThroughSchemaFive() {
+        Configuration config = new Configuration();
+        RingworldSettings settings = new RingworldSettings();
+        settings.setupConfig(config, "ringworld");
+        config.get("ringworld", "Enabled", false).set(true);
+        Property sideFeather = config.get("ringworld", "Side_Feather_Blocks", 128.0);
+        assertTrue(sideFeather.requiresWorldRestart());
+        sideFeather.set(128.0);
+        settings.loadFromConfig(config, "ringworld");
+
+        assertEquals(128.0, settings.sunshade().sideFeatherBlocks(), 0.0);
+        NBTTagCompound saved = new NBTTagCompound();
+        settings.writeToNBT(saved);
+        assertEquals(5, saved.getInteger("schemaVersion"));
+        assertEquals(128.0, saved.getDouble("sideFeatherBlocks"), 0.0);
+
+        RingworldSettings restored = new RingworldSettings();
+        restored.readFromNBT(saved);
+        assertEquals(128.0, restored.sunshade().sideFeatherBlocks(), 0.0);
+        assertEquals(0.5, restored.sunshade().transmittance(0L, 0.0, -8_128.0), 0.0);
+    }
+
+    @Test
+    public void legacySchemasKeepHardSideEdgesWhileSchemaThreeRetainsItsExplicitAtmosphereFade() {
+        RingworldSettings settings = new RingworldSettings();
+        settings.readFromNBT(enabledTag());
+        assertEquals(0.0, settings.sunshade().sideFeatherBlocks(), 0.0);
+        assertEquals(8, settings.sunshadeThicknessBlocks());
+
+        settings.readFromNBT(schemaTwoTag(768, 12));
+        assertEquals(0.0, settings.sunshade().sideFeatherBlocks(), 0.0);
+        assertEquals(12, settings.sunshadeThicknessBlocks());
+
+        settings.readFromNBT(schemaThreeTag(200.0));
+        assertEquals(0.0, settings.sunshade().sideFeatherBlocks(), 0.0);
+        assertEquals(200.0, settings.thinAtmosphereFadeStartY(), 0.0);
+    }
+
+    @Test
+    public void schemaFourRejectsMissingWrongTypedAndOutOfRangeSideFeatherWithoutReplacingState() {
+        RingworldSettings settings = new RingworldSettings();
+        settings.readFromNBT(schemaFourTag(200.0, 128.0));
+        RingworldSunshade accepted = settings.sunshade();
+
+        NBTTagCompound missing = schemaFourTag(200.0, 128.0);
+        missing.removeTag("sideFeatherBlocks");
+        assertThrows(IllegalArgumentException.class, () -> settings.readFromNBT(missing));
+        NBTTagCompound wrongType = schemaFourTag(200.0, 128.0);
+        wrongType.setInteger("sideFeatherBlocks", 128);
+        assertThrows(IllegalArgumentException.class, () -> settings.readFromNBT(wrongType));
+        NBTTagCompound negative = schemaFourTag(200.0, -1.0);
+        assertThrows(IllegalArgumentException.class, () -> settings.readFromNBT(negative));
+        NBTTagCompound nonFinite = schemaFourTag(200.0, Double.NaN);
+        assertThrows(IllegalArgumentException.class, () -> settings.readFromNBT(nonFinite));
+        NBTTagCompound tooWide = schemaFourTag(200.0, 8_192.1);
+        assertThrows(IllegalArgumentException.class, () -> settings.readFromNBT(tooWide));
+
+        Configuration invalidConfig = new Configuration();
+        settings.setupConfig(invalidConfig, "ringworld");
+        invalidConfig.get("ringworld", "Enabled", false).set(true);
+        invalidConfig.get("ringworld", "Side_Feather_Blocks", 128.0).set(-1.0);
+        assertThrows(IllegalArgumentException.class, () -> settings.loadFromConfig(invalidConfig, "ringworld"));
+
+        Configuration malformedConfig = new Configuration();
+        settings.setupConfig(malformedConfig, "ringworld");
+        malformedConfig.getCategory("ringworld").put("Side_Feather_Blocks",
+                new Property("Side_Feather_Blocks", "oops", Property.Type.DOUBLE));
+        assertThrows(IllegalArgumentException.class, () -> settings.loadFromConfig(malformedConfig, "ringworld"));
+
+        assertSame(accepted, settings.sunshade());
+        assertEquals(128.0, settings.sunshade().sideFeatherBlocks(), 0.0);
+    }
+
+    @Test
+    public void schemaFivePersistsTheConfiguredAirBoundsAndRejectsInvalidCandidatesAtomically() {
+        RingworldSettings settings = new RingworldSettings();
+        Configuration config = new Configuration();
+        settings.setupConfig(config, "ringworld");
+        config.get("ringworld", "Enabled", false).set(true);
+        config.get("ringworld", "Atmosphere_Lower_Y", 0.0).set(24.0);
+        config.get("ringworld", "Thin_Atmosphere_Fade_Start_Y", 192.0).set(200.0);
+        config.get("ringworld", "Atmosphere_Upper_Y", 256.0).set(320.0);
+        settings.loadFromConfig(config, "ringworld");
+
+        RingworldAirProfile accepted = settings.atmosphereProfile();
+        assertEquals(24.0, accepted.lowerY(), 0.0);
+        assertEquals(200.0, accepted.fullDensityTopY(), 0.0);
+        assertEquals(320.0, accepted.upperY(), 0.0);
+        NBTTagCompound saved = new NBTTagCompound();
+        settings.writeToNBT(saved);
+        assertEquals(5, saved.getInteger("schemaVersion"));
+        assertEquals(24.0, saved.getDouble("atmosphereLowerY"), 0.0);
+        assertEquals(320.0, saved.getDouble("atmosphereUpperY"), 0.0);
+
+        NBTTagCompound missing = saved.copy();
+        missing.removeTag("atmosphereLowerY");
+        assertThrows(IllegalArgumentException.class, () -> settings.readFromNBT(missing));
+        NBTTagCompound invalid = saved.copy();
+        invalid.setDouble("atmosphereUpperY", 200.0);
+        assertThrows(IllegalArgumentException.class, () -> settings.readFromNBT(invalid));
+        assertSame(accepted, settings.atmosphereProfile());
+
+        RingworldSettings legacy = new RingworldSettings();
+        legacy.readFromNBT(schemaFourTag(200.0, 64.0));
+        assertEquals(0.0, legacy.atmosphereProfile().lowerY(), 0.0);
+        assertEquals(200.0, legacy.atmosphereProfile().fullDensityTopY(), 0.0);
+        assertEquals(256.0, legacy.atmosphereProfile().upperY(), 0.0);
+    }
+
     private static NBTTagCompound enabledTag() {
         NBTTagCompound tag = new NBTTagCompound();
         tag.setInteger("schemaVersion", 1);
@@ -381,6 +581,13 @@ public class RingworldSettingsTest {
         NBTTagCompound tag = schemaTwoTag(768, 12);
         tag.setInteger("schemaVersion", 3);
         tag.setDouble("thinAtmosphereFadeStartY", thinAtmosphereFadeStartY);
+        return tag;
+    }
+
+    private static NBTTagCompound schemaFourTag(double thinAtmosphereFadeStartY, double sideFeatherBlocks) {
+        NBTTagCompound tag = schemaThreeTag(thinAtmosphereFadeStartY);
+        tag.setInteger("schemaVersion", 4);
+        tag.setDouble("sideFeatherBlocks", sideFeatherBlocks);
         return tag;
     }
 }

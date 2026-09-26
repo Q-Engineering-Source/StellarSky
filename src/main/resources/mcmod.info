@@ -1,7 +1,7 @@
 [{
   "modid": "stellarsky",
   "name": "Stellar Sky",
-  "description": "Real astronomical skies, extended catalogues, and per-dimension time control.",
+  "description": "Real astronomical skies, extended catalogues, and per-dimension time control. Actinium is required on clients; no no-Actinium rendering fallback.",
   "version": "${version}",
   "mcversion": "${mcversion}",
   "url": "http://www.minecraftforum.net/forums/mapping-and-modding/minecraft-mods/wip-mods/1444983-wip-stellarium-real-constellations-sun-moon",

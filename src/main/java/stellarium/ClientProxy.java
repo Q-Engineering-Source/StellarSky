@@ -31,6 +31,12 @@ import stellarium.client.ClientSettings;
 import stellarium.client.StellarClientFMLHook;
 import stellarium.client.ring.RingworldBoardRenderer;
 import stellarium.client.ring.RingworldAtmosphereFog;
+import stellarium.client.ring.RingworldSpatialAirCompositor;
+import stellarium.client.ring.SSCloudClientHooks;
+import stellarium.client.ring.SSCloudRenderer;
+import stellarium.client.ring.ProceduralRingModelCommand;
+import stellarium.client.ring.CloudDebugCommand;
+import net.minecraftforge.client.ClientCommandHandler;
 import stellarium.client.overlay.StellarSkyOverlays;
 import stellarium.client.overlay.clientcfg.OverlayClientSettingsType;
 import stellarium.client.overlay.clock.OverlayClockType;
@@ -79,10 +85,17 @@ public class ClientProxy extends CommonProxy implements IProxy {
 
 		MinecraftForge.EVENT_BUS.register(new StellarClientFMLHook());
 		MinecraftForge.EVENT_BUS.register(new RingworldAtmosphereFog());
+		MinecraftForge.EVENT_BUS.register(new RingworldSpatialAirCompositor());
+		MinecraftForge.EVENT_BUS.register(new SSCloudClientHooks());
 		Minecraft minecraft = Minecraft.getMinecraft();
+		minecraft.gameSettings.clouds = 0;
 		if (!(minecraft.getResourceManager() instanceof IReloadableResourceManager resources))
 			throw new IllegalStateException("Ringworld rendering requires a reloadable client resource manager");
-		resources.registerReloadListener(manager -> minecraft.addScheduledTask(RingworldBoardRenderer::invalidate));
+		resources.registerReloadListener(manager -> minecraft.addScheduledTask(() -> {
+			RingworldBoardRenderer.invalidate();
+			RingworldSpatialAirCompositor.invalidate();
+			SSCloudRenderer.invalidate();
+		}));
 
 		OverlayRegistry.registerOverlaySet("stellarsky", new StellarSkyOverlays());
 		OverlayRegistry.registerOverlay("clock", new OverlayClockType(), this.guiConfig);
@@ -97,6 +110,8 @@ public class ClientProxy extends CommonProxy implements IProxy {
 	@Override
 	public void load(FMLInitializationEvent event) throws IOException {
 		super.load(event);
+		ClientCommandHandler.instance.registerCommand(new ProceduralRingModelCommand());
+		ClientCommandHandler.instance.registerCommand(new CloudDebugCommand());
 
 		guiConfig.syncFromFile();
 	}

@@ -15,6 +15,8 @@ import stellarium.render.util.BufferBuilderEx;
 import stellarium.render.util.FloatVertexFormats;
 import stellarium.render.util.VertexDirect;
 import stellarium.render.util.VertexReferences;
+import stellarium.world.ring.RingworldDisplaySnapshot;
+import stellarium.world.ring.RingworldSkyIllumination;
 
 public class LayerRHelper {
 	public static final double DEEP_DEPTH = 100.0;
@@ -23,6 +25,8 @@ public class LayerRHelper {
 	public final WorldClient world;
 	public final float partialTicks;
 	public final double atmosphereFade;
+	public final RingworldDisplaySnapshot ringworldSnapshot;
+	public final RingworldSkyIllumination ringworldSkyIllumination;
 
 	public final BufferBuilderEx builder;
 	public final VertexDirect renderer;
@@ -39,6 +43,8 @@ public class LayerRHelper {
 		this.world = info.world;
 		this.partialTicks = info.partialTicks;
 		this.atmosphereFade = info.atmosphereFade;
+		this.ringworldSnapshot = info.ringworldSnapshot;
+		this.ringworldSkyIllumination = info.ringworldSkyIllumination;
 
 		this.builder = VertexReferences.getBuilder();
 		this.renderer = VertexReferences.getRenderer();

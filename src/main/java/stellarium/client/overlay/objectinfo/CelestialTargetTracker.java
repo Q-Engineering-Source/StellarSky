@@ -25,6 +25,7 @@ import stellarium.stellars.system.SolarObject;
 import stellarium.stellars.system.Moon;
 import stellarium.time.StellarSkyTime;
 import stellarium.util.MCUtil;
+import stellarium.world.StellarCoordinates;
 import stellarium.world.StellarScene;
 
 final class CelestialTargetTracker {
@@ -58,6 +59,10 @@ final class CelestialTargetTracker {
         Vector3 groundLook = new Vector3(minecraftLook.x, -minecraftLook.z, minecraftLook.y).normalize();
         cursorHorizontal = new SpCoord().setWithVec(groundLook);
         StellarScene scene = StellarScene.getScene(mc.world);
+        boolean ringBackground = scene != null
+                && scene.getSettings().getRingworldSettings().sunshade() != null;
+        Matrix3 backgroundProjection = StellarCoordinates.backgroundProjection(coordinate);
+        Vector3 backgroundLook = backgroundGroundLook(groundLook, ringBackground);
         boolean hideBelowHorizon = scene != null && scene.getSettings().hideObjectsUnderHorizon();
         // Objects below the horizon are not part of the rendered sky when the
         // active sky set hides them. Do this before catalogue lookup so a
@@ -66,13 +71,14 @@ final class CelestialTargetTracker {
             target = null;
             return;
         }
-        Vector3 eclipticLook = new Matrix3(coordinate.getProjectionToGround()).transpose()
-                .transform(new Vector3(groundLook));
+        Vector3 eclipticLook = new Matrix3(backgroundProjection).transpose()
+                .transform(new Vector3(backgroundLook));
         Vector3 equatorialLook = ECLIPTIC_TO_EQUATORIAL.transform(new Vector3(eclipticLook));
 
         float fov = MCUtil.getFOVModifier(mc.entityRenderer, 1.0f, true);
         double tolerance = Math.max(0.05, configuredTolerance * fov / 70.0);
-        Candidate best = findLegacy(mc, coordinate, groundLook, tolerance, hideBelowHorizon,
+        Candidate best = findLegacy(mc, coordinate, groundLook, backgroundProjection,
+                backgroundLook, tolerance, hideBelowHorizon,
                 StellarSky.PROXY.getClientSettings().lowPowerRenderer,
                 StellarSky.PROXY.getClientSettings().renderMoon);
 
@@ -83,7 +89,7 @@ final class CelestialTargetTracker {
         if(extended != null) {
             Vector3 eclipticDirection = EQUATORIAL_TO_ECLIPTIC.transform(
                     new Vector3(extended.equatorialDirection));
-            Vector3 groundDirection = coordinate.getProjectionToGround().transform(eclipticDirection);
+            Vector3 groundDirection = backgroundProjection.transform(eclipticDirection);
             if(!isUsableDirection(groundDirection)
                     || (hideBelowHorizon && new SpCoord().setWithVec(groundDirection).y < 0.0))
                 extended = null;
@@ -100,7 +106,8 @@ final class CelestialTargetTracker {
     }
 
     private static Candidate findLegacy(Minecraft mc, ICCoordinates coordinate,
-            Vector3 groundLook, double toleranceDegrees, boolean hideBelowHorizon,
+            Vector3 groundLook, Matrix3 backgroundProjection, Vector3 backgroundLook,
+            double toleranceDegrees, boolean hideBelowHorizon,
             boolean lowPowerRenderer, boolean renderMoon) {
         StellarManager manager;
         try {
@@ -135,11 +142,15 @@ final class CelestialTargetTracker {
                         ecliptic = new Vector3(currentPosition).normalize();
                         equatorial = ECLIPTIC_TO_EQUATORIAL.transform(new Vector3(ecliptic));
                     }
-                    Vector3 ground = coordinate.getProjectionToGround().transform(ecliptic);
+                    boolean solarObject = object instanceof SolarObject;
+                    Matrix3 projection = solarObject
+                            ? coordinate.getProjectionToGround() : backgroundProjection;
+                    Vector3 ground = projection.transform(ecliptic);
                     if(!isUsableDirection(ground)
                             || (hideBelowHorizon && new SpCoord().setWithVec(ground).y < 0.0))
                         continue;
-                    double separation = angularDistanceDegrees(groundLook, ground);
+                    double separation = angularDistanceDegrees(
+                            solarObject ? groundLook : backgroundLook, ground);
                     double objectTolerance = toleranceDegrees;
                     if(object instanceof SolarObject) {
                         double angularRadius = Math.toDegrees(
@@ -165,6 +176,14 @@ final class CelestialTargetTracker {
             }
         }
         return best;
+    }
+
+    static Vector3 backgroundGroundLook(Vector3 legacyGround, boolean ringBackground) {
+        // Invert SkyRenderer's ground-to-world basis for the ring background.
+        // Solar-system selection and non-ring worlds retain their legacy convention.
+        return ringBackground
+                ? new Vector3(-legacyGround.getX(), -legacyGround.getY(), legacyGround.getZ())
+                : legacyGround;
     }
 
     private static double angularDistanceDegrees(Vector3 first, Vector3 second) {

@@ -112,6 +112,12 @@ public class FramebufferCustom {
 
 	private void createFramebuffer()
 	{
+		try (FramebufferBindings ignored = FramebufferBindings.capture()) {
+			createFramebufferBound();
+		}
+	}
+
+	private void createFramebufferBound() {
 		this.framebufferPointer = OpenGlUtil.genFramebuffers();
 		this.frameTexturePointer = TextureUtil.glGenTextures();
 
@@ -143,11 +149,18 @@ public class FramebufferCustom {
 
 		this.framebufferClear();
 		this.checkFramebufferComplete();
-		OpenGlUtil.bindFramebuffer(OpenGlUtil.FRAMEBUFFER_GL, 0);
 		GlStateManager.bindTexture(0);
 	}
 
 	public void deleteFramebuffer() {
+		if (this.framebufferPointer < 0 && this.frameTexturePointer < 0 && this.depthBufferPointer < 0)
+			return;
+		try (FramebufferBindings caller = FramebufferBindings.capture()) {
+			deleteFramebufferBound(caller);
+		}
+	}
+
+	private void deleteFramebufferBound(FramebufferBindings caller) {
 		if (this.depthBufferPointer > -1)
 		{
 			OpenGlUtil.deleteRenderbuffers(this.depthBufferPointer);
@@ -162,7 +175,7 @@ public class FramebufferCustom {
 
 		if (this.framebufferPointer > -1)
 		{
-			OpenGlUtil.bindFramebuffer(OpenGlUtil.FRAMEBUFFER_GL, 0);
+			caller.deleted(this.framebufferPointer);
 			OpenGlUtil.deleteFramebuffers(this.framebufferPointer);
 			this.framebufferPointer = -1;
 		}
@@ -224,33 +237,44 @@ public class FramebufferCustom {
 	public void renderFullQuad() {
 		Tessellator tess = Tessellator.getInstance();
 		BufferBuilder buff = tess.getBuffer();
+		int previousMatrixMode = GlStateManager.glGetInteger(GL11.GL_MATRIX_MODE);
+		boolean projectionPushed = false;
+		boolean modelViewPushed = false;
+		try {
+			GlStateManager.matrixMode(GL11.GL_PROJECTION);
+			GlStateManager.pushMatrix();
+			projectionPushed = true;
+			GlStateManager.loadIdentity();
+			GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+			GlStateManager.pushMatrix();
+			modelViewPushed = true;
+			GlStateManager.loadIdentity();
 
-		GlStateManager.matrixMode(GL11.GL_PROJECTION);
-		GlStateManager.pushMatrix();
-		GlStateManager.loadIdentity();
-		GlStateManager.matrixMode(GL11.GL_MODELVIEW);
-		GlStateManager.pushMatrix();
-		GlStateManager.loadIdentity();
-
-		buff.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX);
-		buff.pos(-1.0, 1.0, 0.0).tex(
-				(double)this.renderX / this.width,
-				(double)(this.renderY + this.renderHeight) / this.height).endVertex();
-		buff.pos(-1.0, -1.0, 0.0).tex(
-				(double)this.renderX / this.width,
-				(double)this.renderY / this.height).endVertex();
-		buff.pos(1.0, -1.0, 0.0).tex(
-				(double)(this.renderX + this.renderWidth) / this.width,
-				(double)this.renderY / this.height).endVertex();
-		buff.pos(1.0, 1.0, 0.0).tex(
-				(double)(this.renderX + this.renderWidth) / this.width,
-				(double)(this.renderY + this.renderHeight) / this.height).endVertex();
-		tess.draw();
-
-		GlStateManager.matrixMode(GL11.GL_PROJECTION);
-		GlStateManager.popMatrix();
-		GlStateManager.matrixMode(GL11.GL_MODELVIEW);
-		GlStateManager.popMatrix();
+			buff.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX);
+			buff.pos(-1.0, 1.0, 0.0).tex(
+					(double)this.renderX / this.width,
+					(double)(this.renderY + this.renderHeight) / this.height).endVertex();
+			buff.pos(-1.0, -1.0, 0.0).tex(
+					(double)this.renderX / this.width,
+					(double)this.renderY / this.height).endVertex();
+			buff.pos(1.0, -1.0, 0.0).tex(
+					(double)(this.renderX + this.renderWidth) / this.width,
+					(double)this.renderY / this.height).endVertex();
+			buff.pos(1.0, 1.0, 0.0).tex(
+					(double)(this.renderX + this.renderWidth) / this.width,
+					(double)(this.renderY + this.renderHeight) / this.height).endVertex();
+			tess.draw();
+		} finally {
+			if(modelViewPushed) {
+				GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+				GlStateManager.popMatrix();
+			}
+			if(projectionPushed) {
+				GlStateManager.matrixMode(GL11.GL_PROJECTION);
+				GlStateManager.popMatrix();
+			}
+			GlStateManager.matrixMode(previousMatrixMode);
+		}
 	}
 
 

@@ -65,7 +65,7 @@ public class EqGridCache implements IDisplayCache<EqGridSettings> {
 			if(this.equatorEnabled) {
 				Buf.set(new SpCoord(-longc*360.0/longn, 0.0).getVec());
 				EqtoEc.transform(Buf);
-				info.projectionToGround.transform(Buf);
+				info.backgroundProjectionToGround.transform(Buf);
 				rawEquator[longc].set(Buf).normalize();
 
 				coord = new SpCoord();
@@ -80,7 +80,7 @@ public class EqGridCache implements IDisplayCache<EqGridSettings> {
 				if(this.gridEnabled) {
 					Buf.set(new SpCoord(-longc*360.0/longn, latc*180.0/latn - 90.0).getVec());
 					EqtoEc.transform(Buf);
-					info.projectionToGround.transform(Buf);
+					info.backgroundProjectionToGround.transform(Buf);
 					rawDisplayvec[longc][latc].set(Buf).normalize();
 
 					coord = new SpCoord();

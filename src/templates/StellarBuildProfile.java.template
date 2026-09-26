@@ -1,0 +1,10 @@
+package stellarium.build;
+
+/** Compile-time artifact identity. Not a resource-pack or client config switch. */
+public final class StellarBuildProfile {
+    public static final boolean CATALOGUE_ONLY = ${catalogueOnly};
+    public static final boolean INCLUDE_DEEP_SKY = ${includeDeepSky};
+    public static final String VERSION = "${artifactVersion}";
+
+    private StellarBuildProfile() { }
+}

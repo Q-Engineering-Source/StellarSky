@@ -19,6 +19,14 @@ public final class RingworldAtmosphereFog {
         if (entity == null || entity.world == null) return;
         RingworldDisplaySnapshot snapshot = RingworldRenderSnapshots.currentFor(entity.world,
                 StellarScene.getScene(entity.world));
+		RingworldSpatialAirFrameOptics optics = RingworldRenderSnapshots.currentFrameOpticsFor(entity.world,
+				StellarScene.getScene(entity.world));
+		if (optics != null && optics.usesSpatialAir()) {
+			// B owns normal-air extinction in its final framebuffer composite.  Do
+			// not early-return: vanilla's already configured fog must be cleared.
+			GlStateManager.disableFog();
+			return;
+		}
         if (snapshot == null || snapshot.atmosphereFade() == 1.0) return;
 
         // FogDensity cancellation, blindness, cloud fog, water and lava never

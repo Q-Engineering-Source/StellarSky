@@ -43,7 +43,7 @@ public class MilkywayRenderCache implements IObjRenderCache<Milkyway, MilkywaySe
 			for(int latc=0; latc<=latn; latc++){
 				buffer.set(new SpCoord(longc*360.0/longn + 90.0, latc*180.0/latn - 90.0).getVec());
 				EqtoEc.transform(this.buffer);
-				info.coordinate.getProjectionToGround().transform(this.buffer);
+				info.backgroundProjectionToGround.transform(this.buffer);
 
 				milkywayNormal[longc][latc].set(this.buffer);
 			}

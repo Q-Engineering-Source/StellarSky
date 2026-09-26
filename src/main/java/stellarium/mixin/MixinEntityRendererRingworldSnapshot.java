@@ -15,6 +15,7 @@ public abstract class MixinEntityRendererRingworldSnapshot {
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/EntityRenderer;setupCameraTransform(FI)V"),
             index = 0, require = 1, allow = 1)
     private float stellarium$captureRenderObserver(float partialTicks) {
+        RingworldRenderSnapshots.clearCurvatureFrame();
         RingworldRenderSnapshots.captureCurrentWorldOnce(partialTicks);
         return partialTicks;
     }

@@ -54,6 +54,19 @@ public class StellarNetworkAdmissionTest {
     }
 
     @Test
+    public void catalogueAndStandardBuildFlavorsCannotConnectOnEitherSide() {
+        StellarSky mod = new StellarSky();
+        String current = StellarSkyReferences.VERSION;
+        String counterpart = current.endsWith("-catalogue")
+                ? current.substring(0, current.length() - "-catalogue".length())
+                : current + "-catalogue";
+        Map<String, String> peer = Map.of(StellarSkyReferences.MODID, counterpart);
+
+        assertFalse(mod.checkNetwork(peer, Side.CLIENT));
+        assertFalse(mod.checkNetwork(peer, Side.SERVER));
+    }
+
+    @Test
     public void optionalPeerFallbackAndNextServerPresenceRemainIntact() {
         StellarSky mod = new StellarSky();
 

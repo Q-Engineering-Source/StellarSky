@@ -16,6 +16,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import stellarium.StellarSky;
+import stellarium.build.StellarBuildProfile;
 
 /** Names shared by the object picker and the extended Stellarium catalogues. */
 public final class CelestialNameCatalog {
@@ -23,26 +24,29 @@ public final class CelestialNameCatalog {
             "/assets/stellarium/catalog/names/common_star_names.fab");
     private static final Map<Integer, String> CHINESE_STARS = loadStars(
             "/assets/stellarium/catalog/names/star_names.zh_CN.fab");
-    private static final Map<String, String> CHINESE_DSO = loadDso(
-            "/assets/stellarium/catalog/names/dso_names.zh_CN.fab");
+    private static final Map<String, String> CHINESE_DSO = StellarBuildProfile.INCLUDE_DEEP_SKY
+            ? loadDso("/assets/stellarium/catalog/names/dso_names.zh_CN.fab")
+            : Collections.<String, String>emptyMap();
 
     private static final Map<String, String> ENGLISH_DSO;
     static {
         Map<String, String> names = new HashMap<String, String>();
-        names.put("M31", "Andromeda Galaxy");
-        names.put("M42", "Orion Nebula");
-        names.put("M45", "Pleiades");
-        names.put("M44", "Beehive Cluster");
-        names.put("M7", "Ptolemy Cluster");
-        names.put("M13", "Hercules Cluster");
-        names.put("M51", "Whirlpool Galaxy");
-        names.put("M57", "Ring Nebula");
-        names.put("M81", "Bode's Galaxy");
-        names.put("M82", "Cigar Galaxy");
-        names.put("M87", "Virgo A");
-        names.put("M101", "Pinwheel Galaxy");
-        names.putAll(loadEnglishDso(
-                "/assets/stellarium/catalog/names/modern_iau.json"));
+        if(StellarBuildProfile.INCLUDE_DEEP_SKY) {
+            names.put("M31", "Andromeda Galaxy");
+            names.put("M42", "Orion Nebula");
+            names.put("M45", "Pleiades");
+            names.put("M44", "Beehive Cluster");
+            names.put("M7", "Ptolemy Cluster");
+            names.put("M13", "Hercules Cluster");
+            names.put("M51", "Whirlpool Galaxy");
+            names.put("M57", "Ring Nebula");
+            names.put("M81", "Bode's Galaxy");
+            names.put("M82", "Cigar Galaxy");
+            names.put("M87", "Virgo A");
+            names.put("M101", "Pinwheel Galaxy");
+            names.putAll(loadEnglishDso(
+                    "/assets/stellarium/catalog/names/modern_iau.json"));
+        }
         ENGLISH_DSO = Collections.unmodifiableMap(names);
     }
 

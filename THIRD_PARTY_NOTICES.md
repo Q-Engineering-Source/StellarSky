@@ -1,5 +1,13 @@
 # Third-Party Notices
 
+Both build variants retain the star catalogues, star-name data and shared solar
+resources described below. The standard build additionally includes the deep-sky
+catalogues/images and Milky Way layers. The catalogue-only build omits those
+deep-sky and Milky Way resources; notices for retained shared code still apply.
+The former image-sky build has been retired. Its NASA SVS background image is no
+longer included in either variant; historical provenance remains in the C22
+research and release records, not as a claim that current artifacts contain it.
+
 Stellar Sky includes data and rendering techniques adapted from Stellarium.
 
 ## Stellarium

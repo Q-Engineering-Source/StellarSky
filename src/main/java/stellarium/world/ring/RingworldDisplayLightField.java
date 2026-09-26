@@ -19,15 +19,22 @@ public record RingworldDisplayLightField(RingworldDisplaySnapshot snapshot) {
      * Returns only the snapshot-local SKY subtraction for a receiver centre.
      *
      * <p>The display field deliberately has no client clock or mutable world
-     * fallback: an absent phase is neutral. Receiver height stays a double so
-     * render-time section centres above the old vanilla build range retain the
-     * same board-plane semantics.</p>
+     * fallback. An absent phase fails dark below the board inside its finite
+     * strip, while statically exposed receivers above the board, outside the
+     * strip, or under an empty board remain neutral. Receiver height stays a
+     * double so render-time section centres above the old vanilla build range
+     * retain the same board-plane semantics.</p>
      */
     public int skySubtraction(double x, double y, double z) {
+		requireFinite("x", x);
+		requireFinite("y", y);
+		requireFinite("z", z);
         RingworldSunshade.Phase phase = snapshot.phase();
-        if (phase == null || y >= sunshadeUpperFaceY()) {
-            return 0;
-        }
+		if (y >= sunshadeUpperFaceY() || !RingworldStripBounds.insideBoard(z) || snapshot.sunshade().isEmpty()) {
+			return 0;
+		}
+		if(phase == null)
+			return 15;
         if (y >= snapshot.sunshadeHeightBlocks()) {
             return snapshot.sunshade().materialOccupied(phase, x, z) ? 15 : 0;
         }
@@ -45,4 +52,9 @@ public record RingworldDisplayLightField(RingworldDisplaySnapshot snapshot) {
         return RingworldPackedLight.upperFaceY(snapshot.sunshadeHeightBlocks(),
                 snapshot.sunshadeThicknessBlocks());
     }
+
+	private static void requireFinite(String name, double value) {
+		if(!Double.isFinite(value))
+			throw new IllegalArgumentException(name + " must be finite");
+	}
 }

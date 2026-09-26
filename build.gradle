@@ -5,14 +5,44 @@ plugins {
     id 'xyz.wagyourtail.unimined' version '1.4.26-kappa'
 }
 
-version = mod_version
+def skyFlavor = providers.gradleProperty('skyFlavor').getOrElse('standard')
+if (!(skyFlavor in ['standard', 'catalogue'])) {
+    throw new GradleException('skyFlavor must be standard or catalogue')
+}
+def catalogueOnly = skyFlavor == 'catalogue'
+version = mod_version + (catalogueOnly ? '-catalogue' : '')
 group = root_package
 base { archivesName = mod_id }
+
+def generatedProfile = layout.buildDirectory.dir('generated/sources/stellarProfile/main/java')
+def generateStellarBuildProfile = tasks.register('generateStellarBuildProfile', Sync) {
+    inputs.property('skyFlavor', skyFlavor)
+    inputs.property('artifactVersion', project.version.toString())
+    // Keep the input outside an ignored build/ directory while publishing the
+    // generated source at the path matching its Java package (also in sourcesJar).
+    from('src/templates') {
+        include 'StellarBuildProfile.java.template'
+        into('stellarium/build')
+        rename { it.replace('.template', '') }
+        expand(catalogueOnly: catalogueOnly, includeDeepSky: !catalogueOnly,
+                artifactVersion: project.version.toString())
+    }
+    into(generatedProfile)
+}
+sourceSets.main.java.srcDir(generatedProfile)
+tasks.named('compileJava') { dependsOn(generateStellarBuildProfile) }
+
+// Profile-separated resource outputs prevent a standard -> catalogue build from
+// retaining excluded deep-sky resources left in the previous processResources output.
+def profileResources = layout.buildDirectory.dir("resources/${skyFlavor}/main")
+sourceSets.main.output.resourcesDir = profileResources.get().asFile
 
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(25) }
     withSourcesJar()
 }
+tasks.named('sourcesJar') { dependsOn(generateStellarBuildProfile) }
+tasks.named('javadoc') { dependsOn(generateStellarBuildProfile) }
 
 configurations {
     modCompileOnly
@@ -41,6 +71,20 @@ def r1LocalLightProbeJar = tasks.register('r1LocalLightProbeJar', Jar) {
     }
 }
 
+def c53LocateProbeJar = tasks.register('c53LocateProbeJar', Jar) {
+    group = 'verification'
+    dependsOn tasks.named('compileTestJava')
+    archiveBaseName = 'stellarsky-c53-locate-probe'
+    archiveClassifier = 'dev'
+    destinationDirectory = layout.buildDirectory.dir('diagnostics/c53')
+    from(sourceSets.test.output.classesDirs) {
+        include 'stellarium/world/ring/generation/C53LocateProbeMod*.class'
+        include 'stellarium/world/ring/generation/C53GenerationProbeMod*.class'
+        include 'stellarium/world/ring/generation/C53DensityProbeMod*.class'
+        include 'stellarium/world/ring/generation/C53RuntimeProbeMod*.class'
+    }
+}
+
 unimined.minecraft {
     version '1.12.2'
     mappings { mcp('stable', '39-1.12') }
@@ -53,6 +97,11 @@ unimined.minecraft {
         }
     }
     defaultRemapJar = false
+    remap(c53LocateProbeJar.get(), 'remapC53LocateProbeJar') {
+        archiveBaseName = 'stellarsky-c53-locate-probe'
+        archiveClassifier = ''
+        destinationDirectory = layout.buildDirectory.dir('diagnostics/c53')
+    }
     remap(tasks.named('jar').get())
     remap(r1LocalLightProbeJar.get(), 'remapR1LocalLightProbeJar') {
         archiveBaseName = 'stellarsky-r1-local-light-probe'
@@ -66,6 +115,13 @@ unimined.minecraft {
 }
 
 repositories {
+    ivy {
+        name = 'ActiniumOfficialRelease'
+        url = 'https://github.com/DHJComical/Actinium/releases/download'
+        patternLayout { artifact '[revision]/[artifact]-[revision].[ext]' }
+        metadataSources { artifact() }
+        content { includeModule('com.dhj.actinium', 'Actinium') }
+    }
     mavenCentral()
     mavenLocal()
     maven { url = 'https://jitpack.io' }
@@ -76,9 +132,24 @@ dependencies {
     compileOnly 'com.cleanroommc:sponge-mixin:0.20.13+mixin.0.8.7'
     compileOnly 'com.cleanroommc:lwjglx:1.0.0'
     modCompileOnly project(':stellarapi')
+    // Official release only: do not compile against the locally drafted prerequisite API.
+    modCompileOnly('com.dhj.actinium:Actinium:alpha-0.0.8') { transitive = false }
+    def dhCompatibilityJar = providers.gradleProperty('dhCompatibilityJar').orNull
+    if (dhCompatibilityJar != null) {
+        compileOnly files(dhCompatibilityJar)
+    } else {
+        modCompileOnly('curse.maven:distant-horizons-508933:8389134') { transitive = false }
+    }
     modRuntimeOnly files('../StellarAPI/build/libs/stellarapi-1.12.2-0.5.2.3.jar')
     testImplementation 'junit:junit:4.13.2'
     testRuntimeOnly project(':stellarapi')
+    // Exercise the exact upstream shader parser and uniform contracts without a GL context.
+    testRuntimeOnly('com.dhj.actinium:Actinium:alpha-0.0.8') { transitive = false }
+    if (dhCompatibilityJar != null) {
+        testRuntimeOnly files(dhCompatibilityJar)
+    } else {
+        testRuntimeOnly('curse.maven:distant-horizons-508933:8389134') { transitive = false }
+    }
 }
 
 sourceSets.test {
@@ -87,9 +158,26 @@ sourceSets.test {
 }
 
 processResources {
+    destinationDir = profileResources.get().asFile
+    inputs.property('skyFlavor', skyFlavor)
+    if (catalogueOnly) {
+        exclude 'assets/stellarium/catalog/dso_catalog.txt', 'assets/stellarium/catalog/names/dso_names.zh_CN.fab',
+                'assets/stellarium/catalog/names/modern_iau.json', 'assets/stellarium/dso/**',
+                'assets/stellarium/deepsky/messier/**',
+                'assets/stellarium/stellar/milkyway.png', 'assets/stellarium/stellar/extended_milkyway.png',
+                'assets/stellarium/textures/gui/milkyway*.png',
+                'assets/stellarium/shaders/extended_deep_sky.*',
+                'assets/stellarium/shaders/extended_deep_sky_image.*', 'assets/stellarium/shaders/extended_milkyway.psh'
+    }
     def metadata = [version: project.version, mcversion: '1.12.2']
     inputs.properties(metadata)
     filesMatching('mcmod.info') { expand(metadata) }
+    // Cleanroom 1.12's client requests lowercase locale paths, unlike Forge's
+    // server-only en_US fallback. Preserve source filenames on Windows while
+    // publishing the actual client resource contract.
+    filesMatching('assets/stellarium/lang/*.lang') {
+        name = name.toLowerCase(Locale.ROOT)
+    }
 }
 
 compileJava {
@@ -123,6 +211,85 @@ tasks.named('test') {
     exclude '**/StellarSceneCandidateTest.class'
 }
 
+tasks.register('assembleActiniumShaderDiagnostics', JavaExec) {
+    group = 'verification'
+    description = 'Assembles the real Actinium terrain shaders for offline compiler validation; no GL context.'
+    dependsOn tasks.named('testClasses')
+    dependsOn ':stellarapi:remapJar'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'stellarium.client.ring.actinium.ActiniumShaderAssembly'
+    args layout.buildDirectory.dir('diagnostics/actinium-shaders').get().asFile.absolutePath
+}
+
+tasks.register('assembleRingworldCurvatureShaderDiagnostics', JavaExec) {
+    group = 'verification'
+    description = 'Assembles own media and exact DH shaders for offline compilation; no GL context.'
+    dependsOn tasks.named('testClasses'), ':stellarapi:remapJar'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'stellarium.client.ring.RingworldCurvatureShaderDiagnostics'
+    args layout.buildDirectory.dir('diagnostics/c26-curvature-shaders').get().asFile.absolutePath
+}
+
+def actiniumCompatLibraries = tasks.register('extractActiniumCompatShaderLibraries', Sync) {
+    // Cleanroom extracts these contained libraries during real startup; a plain
+    // headless JavaExec must use the same bytes from the pinned release itself.
+    from({
+        def release = configurations.testRuntimeClasspath.resolvedConfiguration.resolvedArtifacts.find {
+            it.moduleVersion.id.group == 'com.dhj.actinium' && it.name == 'Actinium'
+        }
+        if (release == null) throw new GradleException('Official Actinium release is missing from diagnostic runtime')
+        zipTree(release.file)
+    })
+    include 'antlr4-runtime-4.13.2.jar', 'glsl-transformation-lib-0.2.0-32.g7dd88a4-GTNH.jar'
+    into layout.buildDirectory.dir('diagnostics/actinium-compat-libraries')
+}
+
+tasks.register('assembleActiniumCompatShaderDiagnostics', JavaExec) {
+    group = 'verification'
+    description = 'Exports actual catalogue shaders after the official Actinium compatibility transform; no GL context.'
+    dependsOn tasks.named('testClasses'), ':stellarapi:remapJar', actiniumCompatLibraries
+    classpath = sourceSets.test.runtimeClasspath + fileTree(
+            dir: layout.buildDirectory.dir('diagnostics/actinium-compat-libraries'), include: '*.jar')
+    mainClass = 'stellarium.client.ring.ActiniumCompatShaderDiagnostics'
+    args providers.gradleProperty('compatShaderOutput').getOrElse(
+            layout.buildDirectory.dir('diagnostics/actinium-compat-shaders').get().asFile.absolutePath)
+}
+
+tasks.register('verifyActiniumGlLinkage', JavaExec) {
+    group = 'verification'
+    description = 'Applies the real Actinium redirector to an existing SS JAR and checks GL method linkage without GL.'
+    dependsOn tasks.named('testClasses'), ':stellarapi:remapJar', actiniumCompatLibraries
+    classpath = sourceSets.test.runtimeClasspath + fileTree(
+            dir: layout.buildDirectory.dir('diagnostics/actinium-compat-libraries'), include: '*.jar')
+    mainClass = 'stellarium.client.ring.actinium.ActiniumGlLinkageDiagnostics'
+    systemProperty 'angelica.dumpClass', 'false'
+    mustRunAfter tasks.named('remapJar')
+    doFirst {
+        if (!providers.gradleProperty('glLinkageInput').isPresent()) {
+            throw new GradleException('glLinkageInput must name an existing remapped artifact')
+        }
+        args = [providers.gradleProperty('glLinkageInput').get(),
+                providers.gradleProperty('glLinkageOutput').getOrElse(
+                        layout.buildDirectory.dir('diagnostics/actinium-gl-linkage').get().asFile.absolutePath)]
+    }
+}
+
+tasks.register('verifyRingworldUniformContracts', JavaExec) {
+    group = 'verification'
+    description = 'Runs production uniform binders against actual offline linked-shader reflection; no GL context.'
+    dependsOn tasks.named('testClasses'), ':stellarapi:remapJar'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'stellarium.client.ring.RingworldUniformContractDiagnostics'
+    doFirst {
+        if (!providers.gradleProperty('uniformReflectionDirectory').isPresent()) {
+            throw new GradleException('uniformReflectionDirectory must identify a successful real shader-link receipt')
+        }
+        args = [providers.gradleProperty('uniformReflectionDirectory').get(),
+                providers.gradleProperty('uniformContractOutput').getOrElse(
+                        layout.buildDirectory.dir('diagnostics/uniform-contracts').get().asFile.absolutePath)]
+    }
+}
+
 jar {
     archiveClassifier = 'dev'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
@@ -135,6 +302,7 @@ jar {
     }
     manifest {
         attributes(
+                'StellarSky-Sky-Flavor': skyFlavor,
                 'ModType': 'CRL',
                 'FMLCorePlugin': coremod_plugin_class_name,
                 'FMLCorePluginContainsFMLMod': true,

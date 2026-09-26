@@ -29,6 +29,7 @@ import stellarium.world.ring.RingworldClockMirror;
 import stellarium.world.ring.RingworldClockPublisher;
 import stellarium.world.ring.RingworldClockSample;
 import stellarium.world.ring.RingworldClockContinuityTracker;
+import stellarium.world.ring.RingworldAirProfile;
 import stellarium.world.ring.RingworldDisplaySnapshot;
 import stellarium.world.ring.RingworldRenderObserver;
 import stellarium.world.ring.RingworldThinAtmosphere;
@@ -148,13 +149,13 @@ public final class StellarScene implements ICelestialScene {
             return null;
         }
         RingworldClockMirror.DisplayTime displayTime = ringworldClockMirror.displayTimeFor(world, this);
+        RingworldAirProfile airProfile = settings.getRingworldSettings().atmosphereProfile();
         return new RingworldDisplaySnapshot(world, this, displayTime, ringworldSunshade,
                 displayTime == null ? null : ringworldSunshade.phase(displayTime.previous().worldTime(), displayTime.current().worldTime(),
                         displayTime.fraction()), settings.getRingworldSettings().sunshadeHeightBlocks(),
                 settings.getRingworldSettings().sunshadeThicknessBlocks(), observer,
-                RingworldThinAtmosphere.fadeAt(observer.y(), observer.z(),
-                        settings.getRingworldSettings().thinAtmosphereFadeStartY()),
-                AtmosphereGeometry.resolveHeight(world, observer.y(), settings));
+                RingworldThinAtmosphere.fadeAt(observer.y(), observer.z(), airProfile),
+                AtmosphereGeometry.resolveHeight(world, observer.y(), settings), airProfile);
     }
 
     public boolean acceptRingworldClockSample(RingworldClockSample sample, RingworldClockClientState.Receipt receipt) {

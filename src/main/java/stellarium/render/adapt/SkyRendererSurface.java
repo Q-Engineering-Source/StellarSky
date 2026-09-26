@@ -22,10 +22,12 @@ import net.minecraftforge.fml.relauncher.ReflectionHelper;
 import stellarapi.api.render.IAdaptiveRenderer;
 import stellarium.StellarSky;
 import stellarium.client.ring.RingworldRenderSnapshots;
+import stellarium.client.ring.RingworldSpatialAirFrameOptics;
 import stellarium.client.ClientSettings;
 import stellarium.world.AtmosphereGeometry;
 import stellarium.world.StellarScene;
 import stellarium.world.ring.RingworldDisplaySnapshot;
+import stellarium.world.ring.RingworldSkyIllumination;
 
 public class SkyRendererSurface extends IAdaptiveRenderer {
 
@@ -113,15 +115,25 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 		StellarScene dimManager = StellarScene.getScene(world);
 		RingworldDisplaySnapshot snapshot =
 				RingworldRenderSnapshots.currentFor(world, dimManager);
-		double atmosphereFade = snapshot == null ? 1.0 : snapshot.atmosphereFade();
+		// Must run before previous-sky/low-power branches inspect this frame's
+		// mode. StellarRI is later in GenericSkyRenderer's render sequence.
+		RingworldRenderSnapshots.captureCurrentFrameOptics();
+		RingworldSpatialAirFrameOptics optics = RingworldRenderSnapshots.currentFrameOpticsFor(world, dimManager);
+		boolean spatialAir = optics != null && optics.usesSpatialAir();
+		double atmosphereFade = optics == null ? (snapshot == null ? 1.0 : snapshot.atmosphereFade())
+				: optics.legacyAtmosphereFade();
+		RingworldSkyIllumination illumination = RingworldSkyIllumination.from(snapshot);
 		ClientSettings settings = StellarSky.PROXY.getClientSettings();
 		if(settings.lowPowerRenderer) {
-			this.renderLowPowerSky(partialTicks, world, mc, dimManager, snapshot, atmosphereFade);
+			this.renderLowPowerSky(partialTicks, world, mc, dimManager, snapshot,
+					illumination.lowPowerDomeTransmission(atmosphereFade));
 			subRenderer.render(partialTicks, world, mc);
 			return;
 		}
 
-		if(dimManager.getSettings().renderPrevSky() && atmosphereFade > 0.0) {
+		// B supplies sightline air from actual scene depth; retaining vanilla's
+		// whole-screen blue sky here would reintroduce observer-global illumination.
+		if(!spatialAir && dimManager.getSettings().renderPrevSky() && illumination.canRenderPreviousSky(atmosphereFade)) {
 			RenderGlobal renderGlobal = mc.renderGlobal;
 			float lat = (float) dimManager.getSettings().latitude;
 
@@ -190,7 +202,7 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 				}
 			}
 
-			this.renderDarkening(partialTicks, world, mc, atmosphereFade);
+			this.renderDarkening(partialTicks, world, mc, illumination, atmosphereFade);
 		}
 
 		subRenderer.render(partialTicks, world, mc);
@@ -350,7 +362,8 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 		}
 	}
 
-	private void renderDarkening(float partialTicks, WorldClient world, Minecraft mc, double atmosphereFade) {
+	private void renderDarkening(float partialTicks, WorldClient world, Minecraft mc,
+			RingworldSkyIllumination illumination, double atmosphereFade) {
 		Tessellator tessellator = Tessellator.getInstance();
 		BufferBuilder vertexbuffer = tessellator.getBuffer();
 		float brightness = (float) world.getSunBrightness(partialTicks);
@@ -362,7 +375,7 @@ public class SkyRendererSurface extends IAdaptiveRenderer {
 		GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 		try {
 			float baseAlpha = 0.5f + 0.1f * brightness;
-			float alpha = (float) (1.0 - (1.0 - baseAlpha) * atmosphereFade);
+			float alpha = (float) illumination.previousSkyDarkeningAlpha(baseAlpha, atmosphereFade);
 			for (int i = 0; i < 6; ++i) {
 				GlStateManager.pushMatrix();
 				try {

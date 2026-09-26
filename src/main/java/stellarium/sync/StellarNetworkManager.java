@@ -16,6 +16,8 @@ import stellarium.stellars.StellarManager;
 import stellarium.time.StellarSkyTime;
 import stellarium.world.StellarScene;
 import stellarium.world.ring.RingworldClockSample;
+import stellarium.world.ring.terrain.PreviewRequestPacket;
+import stellarium.world.ring.terrain.PreviewResponsePacket;
 
 public final class StellarNetworkManager {
 	
@@ -34,7 +36,12 @@ public final class StellarNetworkManager {
 				MessageObserverSkySync.class, 2, Side.CLIENT);
 		wrapper.registerMessage(MessageRingworldClockSync.Handler.class,
 				MessageRingworldClockSync.class, 3, Side.CLIENT);
+		wrapper.registerMessage(MessageTerrainPreviewRequest.Handler.class, MessageTerrainPreviewRequest.class, 4, Side.SERVER);
+		wrapper.registerMessage(MessageTerrainPreviewResponse.Handler.class, MessageTerrainPreviewResponse.class, 5, Side.CLIENT);
 	}
+
+    public void requestTerrainPreview(PreviewRequestPacket packet) { wrapper.sendToServer(new MessageTerrainPreviewRequest(packet)); }
+    public void sendTerrainPreview(EntityPlayerMP player,PreviewResponsePacket packet) { wrapper.sendTo(new MessageTerrainPreviewResponse(packet),player); }
 
 	public String getID() {
 		return this.id;

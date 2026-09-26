@@ -229,3 +229,16 @@ pip-log.txt
 *.iml
 *.ipr
 *.iws
+
+# Local coordination and runtime evidence are not distributable source.
+/.codex/
+/.idea/
+/.pensieve/
+/.superpowers/
+/AGENTS.override.md
+/CONTEXT.md
+/docs/
+/evidence/
+/logs/
+/hs_err_pid*.mdmp
+/src/test/scripts/

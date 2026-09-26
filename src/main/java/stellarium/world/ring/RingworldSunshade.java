@@ -16,6 +16,7 @@ public final class RingworldSunshade {
     private final double directionX;
     private final double directionZ;
     private final double featherBlocks;
+    private final double sideFeatherBlocks;
 
     public RingworldSunshade(double spacingBlocks,
                              double shadowWidthBlocks,
@@ -23,11 +24,27 @@ public final class RingworldSunshade {
                              double phaseOffsetBlocks,
                              double headingDegrees,
                              double featherBlocks) {
+        this(spacingBlocks, shadowWidthBlocks, cycleTicks, phaseOffsetBlocks, headingDegrees, featherBlocks, 0.0);
+    }
+
+    /**
+     * Creates a moving sunshade with a finite-strip soft field on both Z sides.
+     * The side feather only affects transmitted skylight below the board; it
+     * does not extend or soften the physical board material.
+     */
+    public RingworldSunshade(double spacingBlocks,
+                             double shadowWidthBlocks,
+                             long cycleTicks,
+                             double phaseOffsetBlocks,
+                             double headingDegrees,
+                             double featherBlocks,
+                             double sideFeatherBlocks) {
         requireFinite("spacingBlocks", spacingBlocks);
         requireFinite("shadowWidthBlocks", shadowWidthBlocks);
         requireFinite("phaseOffsetBlocks", phaseOffsetBlocks);
         requireFinite("headingDegrees", headingDegrees);
         requireFinite("featherBlocks", featherBlocks);
+        requireFinite("sideFeatherBlocks", sideFeatherBlocks);
         if (spacingBlocks <= 0.0) {
             throw new IllegalArgumentException("spacingBlocks must be greater than zero");
         }
@@ -41,6 +58,11 @@ public final class RingworldSunshade {
         if (featherBlocks < 0.0 || featherBlocks > maximumFeatherBlocks) {
             throw new IllegalArgumentException("featherBlocks exceeds the available panel or gap width");
         }
+        double maximumSideFeatherBlocks = Math.min(-RingworldStripBounds.BOARD_MIN_Z,
+                RingworldStripBounds.BOARD_MAX_Z_EXCLUSIVE);
+        if (sideFeatherBlocks < 0.0 || sideFeatherBlocks > maximumSideFeatherBlocks) {
+            throw new IllegalArgumentException("sideFeatherBlocks must fit within the finite board half-width");
+        }
         this.spacingBlocks = spacingBlocks;
         this.shadowWidthBlocks = shadowWidthBlocks;
         this.cycleTicks = cycleTicks;
@@ -51,6 +73,7 @@ public final class RingworldSunshade {
         requireFinite("directionX", directionX);
         requireFinite("directionZ", directionZ);
         this.featherBlocks = featherBlocks;
+        this.sideFeatherBlocks = sideFeatherBlocks;
     }
 
     /**
@@ -69,7 +92,7 @@ public final class RingworldSunshade {
         if (!RingworldStripBounds.insideBoard(z)) {
             return OUTSIDE_STRIP_SAMPLE;
         }
-        return sampleForDistance(evaluateDistanceFromPanelCenter(worldTime, projection));
+        return sampleForDistance(evaluateDistanceFromPanelCenter(worldTime, projection), z);
     }
 
     /** Samples a phase captured once by the render entry without re-evaluating its time. */
@@ -82,9 +105,9 @@ public final class RingworldSunshade {
             return OUTSIDE_STRIP_SAMPLE;
         }
         if (shadowWidthBlocks == 0.0 || shadowWidthBlocks == spacingBlocks) {
-            return sampleForDistance(0.0);
+            return sampleForDistance(0.0, z);
         }
-        return sampleForDistance(evaluateDistanceFromPanelCenter(phase, projection));
+        return sampleForDistance(evaluateDistanceFromPanelCenter(phase, projection), z);
     }
 
     /** Allocation-free display-phase material query for packed-light hot paths. */
@@ -110,24 +133,24 @@ public final class RingworldSunshade {
             return 1.0;
         }
         if (shadowWidthBlocks == spacingBlocks) {
-            return 0.0;
+            return combinedTransmittance(0.0, z);
         }
-        return transmittanceForDistance(evaluateDistanceFromPanelCenter(phase, projection),
-                shadowWidthBlocks / 2.0);
+        return combinedTransmittance(transmittanceForDistance(evaluateDistanceFromPanelCenter(phase, projection),
+                shadowWidthBlocks / 2.0), z);
     }
 
-    private EdgeSample sampleForDistance(double distanceFromPanelCenter) {
+    private EdgeSample sampleForDistance(double distanceFromPanelCenter, double z) {
         if (shadowWidthBlocks == 0.0) {
             return new EdgeSample(false, 0.0, false, 1.0);
         }
         if (shadowWidthBlocks == spacingBlocks) {
-            return new EdgeSample(false, 0.0, true, 0.0);
+            return new EdgeSample(false, 0.0, true, combinedTransmittance(0.0, z));
         }
         double panelEdge = shadowWidthBlocks / 2.0;
         double signedEdgeDistance = distanceFromPanelCenter - panelEdge;
         boolean materialOccupied = signedEdgeDistance <= 0.0;
         return new EdgeSample(true, signedEdgeDistance, materialOccupied,
-                transmittanceForDistance(distanceFromPanelCenter, panelEdge));
+                combinedTransmittance(transmittanceForDistance(distanceFromPanelCenter, panelEdge), z));
     }
 
     /** Builds the one-per-render phase from committed endpoints without widening absolute longs to double. */
@@ -153,6 +176,46 @@ public final class RingworldSunshade {
         double centeredTicks = remainder.doubleValue();
         return new Phase(previousTime, currentTime, fraction,
                 centeredModulo(phaseOffsetBlocks + spacingBlocks * (centeredTicks / cycleTicks), spacingBlocks));
+    }
+
+    /**
+     * Returns the unwrapped material-panel ordinal for an already-built render
+     * phase, reduced only at the caller's requested bounded modulus. Rendering
+     * uses a wrapped center for GPU precision, but a dot fault belongs to the
+     * same physical panel across that wrap. This helper is pure: it neither
+     * changes phase construction nor any time/light/sync state.
+     */
+    public int canonicalPanelOrdinalResidue(Phase phase, int modulus) {
+        if (phase == null) {
+            throw new NullPointerException("phase");
+        }
+        if (modulus <= 0) {
+            throw new IllegalArgumentException("modulus must be positive");
+        }
+        BigDecimal previous = BigDecimal.valueOf(phase.previousTime());
+        BigDecimal span = BigDecimal.valueOf(phase.currentTime()).subtract(previous);
+        BigDecimal time = previous.add(span.multiply(BigDecimal.valueOf(phase.fraction())));
+        BigDecimal period = BigDecimal.valueOf(cycleTicks);
+        BigDecimal remainder = time.remainder(period);
+        if (remainder.signum() < 0) {
+            remainder = remainder.add(period);
+        }
+        BigDecimal half = period.divide(BigDecimal.valueOf(2L));
+        // Keep the exact strict `>` boundary used by phase(...): +half remains
+        // positive, while a value just above it enters the negative half.
+        BigDecimal centeredTicks = remainder.compareTo(half) > 0 ? remainder.subtract(period) : remainder;
+        BigDecimal wholeCycles = time.subtract(centeredTicks).divide(period);
+
+        double cycleLocalCenter = phaseOffsetBlocks
+                + spacingBlocks * (centeredTicks.doubleValue() / cycleTicks);
+        double wrappedDifference = cycleLocalCenter - phase.panelCenterBlocks();
+        long localWraps = Math.round(wrappedDifference / spacingBlocks);
+        if (Math.abs(wrappedDifference - localWraps * spacingBlocks) > Math.ulp(spacingBlocks) * 4.0) {
+            throw new IllegalArgumentException("Phase center is not compatible with this sunshade");
+        }
+        BigDecimal ordinal = wholeCycles.add(BigDecimal.valueOf(localWraps));
+        int residue = ordinal.remainder(BigDecimal.valueOf(modulus)).intValueExact();
+        return residue < 0 ? residue + modulus : residue;
     }
 
     /**
@@ -216,9 +279,9 @@ public final class RingworldSunshade {
             return 1.0;
         }
         if (shadowWidthBlocks == spacingBlocks) {
-            return 0.0;
+            return combinedTransmittance(0.0, z);
         }
-        return transmittanceForDistance(distanceFromPanelCenter, shadowWidthBlocks / 2.0);
+        return combinedTransmittance(transmittanceForDistance(distanceFromPanelCenter, shadowWidthBlocks / 2.0), z);
     }
 
     /** Validate before either transverse or full/empty bypass, with one projection per query. */
@@ -276,6 +339,44 @@ public final class RingworldSunshade {
         return progress * progress * (3.0 - 2.0 * progress);
     }
 
+    /**
+     * Combines the moving panel and finite-strip soft fields as independent
+     * opacity factors. Both callers already established that {@code z} is
+     * inside the half-open physical board, so this never expands it.
+     */
+    private double combinedTransmittance(double movementAxisTransmittance, double z) {
+        double sideTransmittance = sideTransmittance(z);
+        return 1.0 - (1.0 - movementAxisTransmittance) * (1.0 - sideTransmittance);
+    }
+
+    /**
+     * Fades only inward from each finite strip side. A zero width preserves
+     * historical hard board boundaries; the midpoint remains fully shaded.
+     */
+    private double sideTransmittance(double z) {
+        if (sideFeatherBlocks == 0.0) {
+            return 0.0;
+        }
+        double inwardDistance = Math.min(z - RingworldStripBounds.BOARD_MIN_Z,
+                RingworldStripBounds.BOARD_MAX_Z_EXCLUSIVE - z);
+        if (inwardDistance >= sideFeatherBlocks) {
+            return 0.0;
+        }
+        double progress = inwardDistance / sideFeatherBlocks;
+        double smoothstep = progress * progress * (3.0 - 2.0 * progress);
+        return 1.0 - smoothstep;
+    }
+
+    /** Exposes the persisted finite-strip soft-edge distance in blocks. */
+    public double sideFeatherBlocks() {
+        return sideFeatherBlocks;
+    }
+
+    /** Exposes the persisted movement-axis soft-edge distance in blocks. */
+    public double featherBlocks() {
+        return featherBlocks;
+    }
+
     public record EdgeSample(boolean hasMaterialEdge,
                              double signedEdgeDistanceBlocks,
                              boolean materialOccupied,
@@ -283,6 +384,12 @@ public final class RingworldSunshade {
     }
 
     public record Phase(long previousTime, long currentTime, double fraction, double panelCenterBlocks) {
+        public Phase {
+            if (!Double.isFinite(fraction) || fraction < 0.0 || fraction > 1.0
+                    || !Double.isFinite(panelCenterBlocks)) {
+                throw new IllegalArgumentException("Invalid sunshade phase");
+            }
+        }
     }
 
     public enum BandCoverage {

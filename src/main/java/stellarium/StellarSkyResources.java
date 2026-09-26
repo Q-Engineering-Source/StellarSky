@@ -3,6 +3,7 @@ package stellarium;
 import net.minecraft.util.ResourceLocation;
 import stellarapi.api.world.resource.PerWorldResource;
 import stellarapi.feature.perdimres.PerDimensionResourceRegistry;
+import stellarium.build.StellarBuildProfile;
 
 public class StellarSkyResources {
 
@@ -50,7 +51,8 @@ public class StellarSkyResources {
 
 	public static void init() {
 		PerDimensionResourceRegistry.getInstance().registerResourceId("End_Sky");
-		PerDimensionResourceRegistry.getInstance().registerResourceId("Milkyway");
+		if(StellarBuildProfile.INCLUDE_DEEP_SKY)
+			PerDimensionResourceRegistry.getInstance().registerResourceId("Milkyway");
 		PerDimensionResourceRegistry.getInstance().registerResourceId("Star");
 
 		PerDimensionResourceRegistry.getInstance().registerResourceId("Sun_Surface");

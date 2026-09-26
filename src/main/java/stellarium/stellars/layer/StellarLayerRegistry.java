@@ -10,6 +10,7 @@ import stellarapi.api.lib.config.IConfigHandler;
 import stellarapi.api.lib.config.INBTConfig;
 import stellarium.client.ClientSettings;
 import stellarium.common.ServerSettings;
+import stellarium.build.StellarBuildProfile;
 import stellarium.stellars.deepsky.LayerDeepSky;
 import stellarium.stellars.milkyway.LayerMilkyway;
 import stellarium.stellars.milkyway.MilkywaySettings;
@@ -31,6 +32,12 @@ public class StellarLayerRegistry {
 	private List<RegistryDelegate> registeredLayers = Lists.newArrayList();
 
 	public StellarLayerRegistry() {
+		if(StellarBuildProfile.CATALOGUE_ONLY) {
+			this.registerLayer(new LayerBrStar(), null);
+			this.registerLayer(new LayerSolarSystem(), "SolarSystem")
+					.commonConfig(SolarSystemSettings::new).clientConfig(SolarSystemClientSettings::new);
+			return;
+		}
 		this.registerLayer(new LayerBrStar(), null);
 		this.registerLayer(new LayerMilkyway(), "MilkyWay").clientConfig(MilkywaySettings::new);
 		this.registerLayer(new LayerSolarSystem(), "SolarSystem")

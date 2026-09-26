@@ -4,6 +4,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import stellarium.client.ring.RingworldBoardRenderer;
+import stellarium.client.ring.SSCloudRenderer;
 
 /** Kirino owns a distinct world pass and supplies its own camera partial tick. */
 @Mixin(targets = "com.cleanroommc.kirino.KirinoClientCore", remap = false)
@@ -13,6 +14,7 @@ public abstract class MixinKirinoRingworldBoard {
             index = 2, remap = false, require = 1, allow = 1)
     private static float stellarium$drawBoardBeforeWorldFog(float partialTicks) {
         RingworldBoardRenderer.renderCurrentWorld(partialTicks);
+        SSCloudRenderer.renderCurrentWorld(partialTicks);
         return partialTicks;
     }
 }

@@ -22,10 +22,12 @@ import stellarium.util.math.StellarMath;
 import stellarium.view.ViewerInfo;
 
 public class PostProcess {
-	private FramebufferCustom frame1 = null, frame2 = null, brQuery = null;
+	private FramebufferCustom frame1 = null, frame2 = null, brQuery = null, linearScene = null;
 	private int prevFramebufferBound;
+	private int width, height;
+	private PostProcessInputRoute inputRoute;
 
-	private IShaderObject scope, skyToQueried, hdrToldr, linearToSRGB;
+	private IShaderObject scope, skyToQueried, hdrToldr, linearToSRGB, linearSceneToRgbE;
 	private IUniformField fieldBrMult, fieldResDir, fieldBrScale, fieldRelative;
 
 	private int maxLevel;
@@ -43,6 +45,8 @@ public class PostProcess {
 	}
 
 	public void onResize(int width, int height) {
+		this.width = width;
+		this.height = height;
 		this.maxLevel = log2(Math.max(width, height) - 1) + 1;
 		int texSize = 1 << this.maxLevel;
 		this.screenRatio = (float)(width * height) / (texSize * texSize);
@@ -53,6 +57,10 @@ public class PostProcess {
 			frame2.deleteFramebuffer();
 		if(this.brQuery != null)
 			brQuery.deleteFramebuffer();
+		if(this.linearScene != null) {
+			linearScene.deleteFramebuffer();
+			linearScene = null;
+		}
 
 		// RGBE format
 		this.frame1 = FramebufferCustom.builder()
@@ -126,6 +134,14 @@ public class PostProcess {
 		linearToSRGB.bindShader();
 		linearToSRGB.getField("texture").setInteger(0);
 		linearToSRGB.releaseShader();
+
+		this.linearSceneToRgbE = ShaderHelper.getInstance().buildShader("LinearSceneToRGBE",
+				StellarSkyResources.vertexHDRtoLDR,
+				StellarSkyResources.fragmentAtmRefraction);
+		requireShader(linearSceneToRgbE, "LinearSceneToRGBE");
+		linearSceneToRgbE.bindShader();
+		linearSceneToRgbE.getField("texture").setInteger(0);
+		linearSceneToRgbE.releaseShader();
 	}
 
 	private static void requireShader(IShaderObject shader, String name) {
@@ -133,14 +149,41 @@ public class PostProcess {
 			throw new IllegalStateException("Unable to initialize post-process shader " + name);
 	}
 
-	public void preProcess() {
+	public void preProcess(PostProcessInputRoute route) {
+		if(route == null)
+			throw new IllegalArgumentException("route must not be null");
 		this.prevFramebufferBound = GlStateManager.glGetInteger(OpenGlUtil.FRAMEBUFFER_BINDING);
+		this.inputRoute = route;
 
-		frame1.bindFramebuffer(false);
-		frame1.framebufferClear();
+		FramebufferCustom target = route.requiresRgbEEncoding()? this.linearScene() : frame1;
+		boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+		GlStateManager.depthMask(true);
+		try {
+			target.bindFramebuffer(false);
+			target.framebufferClear();
+		} finally {
+			GlStateManager.depthMask(depthMask);
+		}
+	}
+
+	private FramebufferCustom linearScene() {
+		if(this.linearScene == null) {
+			if(this.width <= 0 || this.height <= 0)
+				throw new IllegalStateException("Cannot create the linear scene before post-process resize");
+			this.linearScene = FramebufferCustom.builder()
+					.texFormat(OpenGlUtil.RGB32F, GL11.GL_RGB, OpenGlUtil.TEXTURE_FLOAT)
+					.depthStencil(true, false)
+					.build(this.width, this.height);
+		}
+		return this.linearScene;
 	}
 
 	public void postProcess(StellarRI info) {
+		if(this.inputRoute == null)
+			throw new IllegalStateException("Post-process input route was not prepared");
+		if(this.inputRoute.requiresRgbEEncoding())
+			this.encodeLinearSceneToRgbE();
+
 		// TODO Render everything on floating framebuffers
 		// TODO Refactor to make everything clean and sweat
 
@@ -262,6 +305,29 @@ public class PostProcess {
 		frame2.bindFramebufferTexture();
 		frame2.renderFullQuad();
 		linearToSRGB.releaseShader();
+		this.inputRoute = null;
+	}
+
+	private void encodeLinearSceneToRgbE() {
+		FramebufferCustom source = linearScene();
+		frame1.bindFramebuffer(false);
+		frame1.framebufferClear();
+
+		boolean blendEnabled = GL11.glIsEnabled(GL11.GL_BLEND);
+		GlStateManager.disableBlend();
+		try {
+			linearSceneToRgbE.bindShader();
+			try {
+				source.bindFramebufferTexture();
+				frame1.renderFullQuad();
+			} finally {
+				linearSceneToRgbE.releaseShader();
+			}
+		} finally {
+			if(blendEnabled)
+				GlStateManager.enableBlend();
+			else GlStateManager.disableBlend();
+		}
 	}
 
 }

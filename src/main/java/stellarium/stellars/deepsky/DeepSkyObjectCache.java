@@ -56,7 +56,7 @@ public class DeepSkyObjectCache implements IObjRenderCache<DeepSkyObject, IConfi
 
 		for(int i = 0; i < 4; i++) {
 			EqtoEc.transform(quads[i]);
-			info.coordinate.getProjectionToGround().transform(quads[i]);
+			info.backgroundProjectionToGround.transform(quads[i]);
 			coords[i].set(quads[i]);
 			coords[i].scale(LayerRHelper.DEEP_DEPTH);
 		}

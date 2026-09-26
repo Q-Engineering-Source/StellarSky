@@ -86,17 +86,22 @@ public class StellarForgeEventHook {
 
 	@SubscribeEvent
 	public void onPlayerTick(TickEvent.PlayerTickEvent event) {
-		if(event.phase != TickEvent.Phase.END || event.player.world.isRemote || event.player.ticksExisted % 20 != 0)
+		if(event.phase != TickEvent.Phase.END || event.player.world.isRemote)
+			return;
+		net.minecraft.entity.player.EntityPlayerMP player = (net.minecraft.entity.player.EntityPlayerMP) event.player;
+		if(event.player.ticksExisted % 20 != 0)
 			return;
 		StellarSky.INSTANCE.getNetworkManager().sendObserverContext(
-				(net.minecraft.entity.player.EntityPlayerMP) event.player,
+				player,
 				StellarManager.getManager(event.player.getServer().getEntityWorld()), false);
 	}
 
 	@SubscribeEvent
 	public void onPlayerLoggedOut(PlayerLoggedOutEvent event) {
-		if(!event.player.world.isRemote)
+		if(!event.player.world.isRemote) {
 			StellarSky.INSTANCE.getNetworkManager().forgetObserver(
 					(net.minecraft.entity.player.EntityPlayerMP) event.player);
+		}
 	}
+
 }

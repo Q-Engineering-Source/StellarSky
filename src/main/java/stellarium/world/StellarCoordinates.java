@@ -10,6 +10,10 @@ import stellarium.common.ServerSettings;
 public class StellarCoordinates implements ICCoordinates {
 	// Greenwich mean sidereal angle at J2000.0 (2000-01-01 12:00 UT).
 	private static final double J2000_GMST = Math.toRadians(280.46061837);
+	private static final Matrix3 RINGWORLD_BACKGROUND_Q = new Matrix3(
+			1.0, 0.0, 0.0,
+			0.0, 0.0, 1.0,
+			0.0, -1.0, 0.0);
 
 	//Rotation
 	private double rot;
@@ -27,6 +31,7 @@ public class StellarCoordinates implements ICCoordinates {
 
 	private CelestialPeriod dayPeriod;
 	private boolean systemTimeModel;
+	private final boolean ringworldBackground;
 
 	public StellarCoordinates(ServerSettings commonSettings, PerDimensionSettings settings) {
 		this(commonSettings, settings, false);
@@ -34,6 +39,7 @@ public class StellarCoordinates implements ICCoordinates {
 
 	public StellarCoordinates(ServerSettings commonSettings, PerDimensionSettings settings, boolean systemTimeModel) {
 		this.systemTimeModel = systemTimeModel;
+		this.ringworldBackground = settings.getRingworldSettings().sunshade() != null;
 		this.latitude = Math.toRadians(settings.latitude);
 		this.longitude = Math.toRadians(settings.longitude);
 		this.axialTilt = Math.toRadians(commonSettings.propAxialTilt.getDouble());
@@ -206,6 +212,24 @@ public class StellarCoordinates implements ICCoordinates {
 	@Override
 	public Matrix3 getProjectionToGround() {
 		return this.projection;
+	}
+
+	/**
+	 * Returns the projection used by visual background layers. Ringworlds remove
+	 * the observer-latitude frame before applying the fixed world-Z sky axis.
+	 * Ground +N becomes Minecraft +Z; the existing negative sidereal angle then
+	 * runs opposite to positive-X travel around the ring's displayed XY circle.
+	 * physical coordinates retain their original projection for solar objects.
+	 */
+	public static Matrix3 backgroundProjection(ICCoordinates coordinate) {
+		if(!(coordinate instanceof StellarCoordinates))
+			return coordinate.getProjectionToGround();
+		StellarCoordinates stellar = (StellarCoordinates) coordinate;
+		if(!stellar.ringworldBackground)
+			return coordinate.getProjectionToGround();
+		return new Matrix3(RINGWORLD_BACKGROUND_Q)
+				.postMult(stellar.HortoREq)
+				.postMult(coordinate.getProjectionToGround());
 	}
 
 	@Override

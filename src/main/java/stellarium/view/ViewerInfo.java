@@ -9,18 +9,21 @@ import net.minecraft.world.World;
 import net.minecraftforge.client.event.EntityViewRenderEvent;
 import net.minecraftforge.common.MinecraftForge;
 import stellarapi.api.event.RenderQEEvent;
+import stellarapi.api.lib.math.Matrix3;
 import stellarapi.api.lib.math.Vector3;
 import stellarapi.api.optics.EnumRGBA;
 import stellarapi.api.optics.Wavelength;
 import stellarapi.api.view.IAtmosphereEffect;
 import stellarapi.api.view.ICCoordinates;
 import stellarium.util.MCUtil;
+import stellarium.world.StellarCoordinates;
 
 // TODO AA This needs to be reformed
 public class ViewerInfo {
 	public final Vector3 currentPosition;
 
 	public final ICCoordinates coordinate;
+	public final Matrix3 backgroundProjectionToGround;
 	public final IAtmosphereEffect sky;
 
 	public final double multiplyingPower;
@@ -35,6 +38,7 @@ public class ViewerInfo {
 
 	public ViewerInfo(ICCoordinates coordinate, IAtmosphereEffect sky, Entity viewer, float partialTicks) {
 		this.coordinate = coordinate;
+		this.backgroundProjectionToGround = new Matrix3(StellarCoordinates.backgroundProjection(coordinate));
 		this.sky = sky;
 
 		this.currentPosition = new Vector3(viewer.posX, viewer.posY, viewer.posZ);

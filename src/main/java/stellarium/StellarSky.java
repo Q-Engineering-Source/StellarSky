@@ -1,6 +1,8 @@
 package stellarium;
 
 import java.io.IOException;
+import java.io.File;
+import java.util.Objects;
 import java.util.Map;
 
 import org.apache.logging.log4j.Logger;
@@ -12,6 +14,8 @@ import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
+import net.minecraftforge.fml.common.event.FMLServerStoppingEvent;
+import stellarium.world.ring.terrain.ServerPreviewRuntime;
 import net.minecraftforge.fml.common.network.NetworkCheckHandler;
 import net.minecraftforge.fml.relauncher.Side;
 import stellarapi.api.SAPIReferences;
@@ -23,15 +27,18 @@ import stellarium.api.StellarSkyAPI;
 import stellarium.command.CommandLock;
 import stellarium.command.CommandAstronomicalTime;
 import stellarium.command.CommandStellarTime;
+import stellarium.command.CommandTerrainPreviewDiagnostics;
 import stellarium.render.adapt.SkyRenderTypeEnd;
 import stellarium.render.adapt.SkySetTypeEnd;
 import stellarium.sync.StellarNetworkManager;
 import stellarium.world.StellarPack;
 import stellarium.world.provider.EndReplacer;
+import stellarium.world.ring.generation.RingworldGenerationConfig;
+import stellarium.world.ring.terrain.ServerPreviewTransport;
 
 @Mod(modid=StellarSkyReferences.MODID, version=StellarSkyReferences.VERSION,
 acceptedMinecraftVersions="[1.12.0, 1.13.0)",
-dependencies="required-after:stellarapi@[1.12.2-0.5.2.1, 1.12.2-0.5.3.0)", guiFactory="stellarium.client.config.StellarConfigGuiFactory")
+dependencies="required-after:stellarapi@[1.12.2-0.5.2.1, 1.12.2-0.5.3.0);required-after-client:actinium@[alpha-0.0.8]", guiFactory="stellarium.client.config.StellarConfigGuiFactory")
 public class StellarSky {
 	// The instance of Stellar Sky
 	@Mod.Instance(StellarSkyReferences.MODID)
@@ -46,6 +53,11 @@ public class StellarSky {
 	private StellarForgeEventHook eventHook = new StellarForgeEventHook();
 	private StellarTickHandler tickHandler = new StellarTickHandler();
 	private StellarNetworkManager networkManager;
+    private RingworldGenerationConfig generationConfig;
+
+    public RingworldGenerationConfig getGenerationConfig() {
+        return Objects.requireNonNull(generationConfig, "Generation config not initialized");
+    }
 
 	public Logger getLogger() {
 		return this.logger;
@@ -62,6 +74,8 @@ public class StellarSky {
 	@Mod.EventHandler
 	public void preInit(FMLPreInitializationEvent event) { 
 		this.logger = event.getModLog();
+        this.generationConfig = RingworldGenerationConfig.load(new File(
+                new File(event.getModConfigurationDirectory(), StellarSkyReferences.MODID), "world-generation.cfg"));
 
 		this.celestialConfigManager = new ConfigManager(
 				StellarSkyReferences.getConfiguration(event.getModConfigurationDirectory(),
@@ -75,6 +89,8 @@ public class StellarSky {
 
 		MinecraftForge.EVENT_BUS.register(this.eventHook);
 		MinecraftForge.EVENT_BUS.register(this.tickHandler);
+        MinecraftForge.EVENT_BUS.register(ServerPreviewRuntime.INSTANCE);
+        MinecraftForge.EVENT_BUS.register(ServerPreviewTransport.INSTANCE);
 
 		StellarSkyResources.init();
 
@@ -109,12 +125,21 @@ public class StellarSky {
 
 	@Mod.EventHandler
 	public void serverStarting(FMLServerStartingEvent event) {
+        ServerPreviewRuntime.INSTANCE.start(event.getServer());
+        ServerPreviewTransport.INSTANCE.start();
 		event.registerServerCommand(new CommandLock());
 		event.registerServerCommand(new CommandStellarTime());
 		// StellarAPI registers its tick-based replacement first. Register this
 		// afterwards so /time uses the same civil-time model as /stellartime.
 		event.registerServerCommand(new CommandAstronomicalTime());
+		event.registerServerCommand(new CommandTerrainPreviewDiagnostics());
 	}
+
+    @Mod.EventHandler
+    public void serverStopping(FMLServerStoppingEvent event) {
+        ServerPreviewTransport.INSTANCE.stop();
+        ServerPreviewRuntime.INSTANCE.stop();
+    }
 
 
 	public boolean existOnServer() {

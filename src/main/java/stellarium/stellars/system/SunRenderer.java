@@ -3,6 +3,7 @@ package stellarium.stellars.system;
 import org.lwjgl.opengl.GL11;
 
 import net.minecraft.client.renderer.GlStateManager;
+import stellarapi.api.lib.math.Vector3;
 import stellarium.StellarSkyResources;
 import stellarium.StellarSky;
 import stellarium.render.stellars.AtmosphericAppearance;
@@ -19,10 +20,23 @@ public enum SunRenderer implements ICelestialObjectRenderer<SunRenderCache> {
 	@Override
 	public void render(SunRenderCache cache, EnumStellarPass pass, LayerRHelper info) {
 		if(pass == EnumStellarPass.DominateScatter) {
+			if(info.ringworldSkyIllumination.isRing()) {
+				if(!info.ringworldSkyIllumination.canRenderDirectSunScatter()) return;
+				SunVisualTransform transform = SunVisualTransform.toGroundZenith(cache.appPos);
+				Vector3 direction = transform.transform(cache.appPos, new Vector3());
+				float direct = (float) info.ringworldSkyIllumination.directScatterLightColor(0.0);
+				info.renderDominate(direction, direct, direct, direct);
+				return;
+			}
 			float scatter = getTwilightScatter(cache.appPos.getZ());
 			if(scatter > 0.0f)
 				info.renderDominate(cache.appPos, scatter, scatter, scatter);
 		} else if(pass == EnumStellarPass.Opaque) {
+			if(!info.ringworldSkyIllumination.canRenderOpaqueSun()) return;
+			SunVisualTransform visualTransform = info.ringworldSnapshot == null ? null
+					: SunVisualTransform.toGroundZenith(cache.appPos);
+			Vector3 lightDirection = visualTransform == null ? cache.appPos
+					: visualTransform.transform(cache.appPos, new Vector3());
 			if(StellarSky.PROXY.getClientSettings().lowPowerRenderer) {
 				info.bindTexture(StellarSkyResources.resourceVanillaSunSurface);
 				float weather = 1.0f
@@ -33,7 +47,7 @@ public enum SunRenderer implements ICelestialObjectRenderer<SunRenderCache> {
 				GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE);
 				info.bindTexShader();
 				info.builder.begin(GL11.GL_QUADS, FloatVertexFormats.POSITION_TEX_COLOR_F);
-				info.renderTexturedBillboard(cache.appPos, LayerRHelper.DEEP_DEPTH * 0.8,
+				info.renderTexturedBillboard(lightDirection, LayerRHelper.DEEP_DEPTH * 0.8,
 						Math.asin(cache.size) * VANILLA_TEXTURE_CONTENT_SCALE,
 						0.0f, 0.0f, 1.0f, 1.0f,
 						AtmosphericAppearance.blend(cache.vacuumSpriteRed, cache.spriteRed,
@@ -55,6 +69,8 @@ public enum SunRenderer implements ICelestialObjectRenderer<SunRenderCache> {
 			info.builder.begin(GL11.GL_QUADS, FloatVertexFormats.POSITION_TEX_COLOR_F_NORMAL);
 
 			float brightness = 4830000.0f;
+			Vector3 transformedPosition = visualTransform == null ? null : lightDirection;
+			Vector3 transformedNormal = visualTransform == null ? null : new Vector3();
 
 			int longc, latc;
 
@@ -66,33 +82,29 @@ public enum SunRenderer implements ICelestialObjectRenderer<SunRenderCache> {
 					float longdd=(float)(longc+1)/(float)cache.longn;
 					float latdd=1.0f-(float)(latc+1)/(float)cache.latn;
 
-					info.builder.pos(cache.sunPos[longc][latc], LayerRHelper.DEEP_DEPTH * 0.8f);
-					info.builder.tex(longd, latd);
-					info.builder.color(brightness, brightness, brightness,
-							1.0f);
-					info.builder.normal(cache.sunNormal[longc][latc]);
-					info.builder.endVertex();
-
-					info.builder.pos(cache.sunPos[longcd][latc], LayerRHelper.DEEP_DEPTH * 0.8f);
-					info.builder.tex(longdd, latd);
-					info.builder.color(brightness, brightness, brightness,
-							1.0f);
-					info.builder.normal(cache.sunNormal[longcd][latc]);
-					info.builder.endVertex();
-
-					info.builder.pos(cache.sunPos[longcd][latc+1], LayerRHelper.DEEP_DEPTH * 0.8f);
-					info.builder.tex(longdd, latdd);
-					info.builder.color(brightness, brightness, brightness,
-							1.0f);
-					info.builder.normal(cache.sunNormal[longcd][latc+1]);
-					info.builder.endVertex();
-
-					info.builder.pos(cache.sunPos[longc][latc+1], LayerRHelper.DEEP_DEPTH * 0.8f);
-					info.builder.tex(longd, latdd);
-					info.builder.color(brightness, brightness, brightness,
-							1.0f);
-					info.builder.normal(cache.sunNormal[longc][latc+1]);
-					info.builder.endVertex();
+					if(visualTransform == null) {
+						addVertex(info, cache.sunPos[longc][latc], cache.sunNormal[longc][latc],
+								longd, latd, brightness);
+						addVertex(info, cache.sunPos[longcd][latc], cache.sunNormal[longcd][latc],
+								longdd, latd, brightness);
+						addVertex(info, cache.sunPos[longcd][latc+1], cache.sunNormal[longcd][latc+1],
+								longdd, latdd, brightness);
+						addVertex(info, cache.sunPos[longc][latc+1], cache.sunNormal[longc][latc+1],
+								longd, latdd, brightness);
+					} else {
+						addTransformedVertex(info, visualTransform, cache.sunPos[longc][latc],
+								cache.sunNormal[longc][latc], transformedPosition, transformedNormal,
+								longd, latd, brightness);
+						addTransformedVertex(info, visualTransform, cache.sunPos[longcd][latc],
+								cache.sunNormal[longcd][latc], transformedPosition, transformedNormal,
+								longdd, latd, brightness);
+						addTransformedVertex(info, visualTransform, cache.sunPos[longcd][latc+1],
+								cache.sunNormal[longcd][latc+1], transformedPosition, transformedNormal,
+								longdd, latdd, brightness);
+						addTransformedVertex(info, visualTransform, cache.sunPos[longc][latc+1],
+								cache.sunNormal[longc][latc+1], transformedPosition, transformedNormal,
+								longd, latdd, brightness);
+					}
 				}
 			}
 
@@ -100,6 +112,23 @@ public enum SunRenderer implements ICelestialObjectRenderer<SunRenderCache> {
 			info.renderer.draw(info.builder);
 			info.unbindTexShader();
 		}
+	}
+
+	private static void addTransformedVertex(LayerRHelper info, SunVisualTransform transform,
+			Vector3 position, Vector3 normal, Vector3 transformedPosition,
+			Vector3 transformedNormal, float u, float v, float brightness) {
+		transform.transform(position, transformedPosition);
+		transform.transform(normal, transformedNormal);
+		addVertex(info, transformedPosition, transformedNormal, u, v, brightness);
+	}
+
+	private static void addVertex(LayerRHelper info, Vector3 position, Vector3 normal,
+			float u, float v, float brightness) {
+		info.builder.pos(position, LayerRHelper.DEEP_DEPTH * 0.8f);
+		info.builder.tex(u, v);
+		info.builder.color(brightness, brightness, brightness, 1.0f);
+		info.builder.normal(normal);
+		info.builder.endVertex();
 	}
 
 	private static float getTwilightScatter(double sinAltitude) {

@@ -27,7 +27,7 @@ public class StarRenderCache implements IObjRenderCache<BgStar, IConfigHandler> 
 	@Override
 	public void updateCache(BgStar object, ViewerInfo info) {
 		ref.set(object.pos);
-		info.coordinate.getProjectionToGround().transform(this.ref);
+		info.backgroundProjectionToGround.transform(this.ref);
 		pos.set(this.ref);
 		pos.scale(LayerRHelper.DEEP_DEPTH);
 

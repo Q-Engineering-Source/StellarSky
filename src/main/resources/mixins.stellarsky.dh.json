@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "stellarium.mixin.dh",
+  "refmap": "mixins.stellarsky.refmap.json",
+  "target": "@env(DEFAULT)",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [],
+  "client": [
+    "MixinDistantHorizonsShaderSource",
+    "MixinDistantHorizonsTerrainProgram",
+    "MixinDistantHorizonsRenderBufferCulling",
+    "MixinDistantHorizonsFog",
+    "MixinDistantHorizonsDepthCapture",
+    "MixinDistantHorizonsCloudConfig",
+    "MixinDistantHorizonsCloudConfigEntry",
+    "MixinDistantHorizonsCloudRenderer"
+  ]
+}

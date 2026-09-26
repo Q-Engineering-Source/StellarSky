@@ -8,6 +8,15 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public class RingworldSunshadeTest {
+
+	@Test(expected = IllegalArgumentException.class)
+	public void phaseRejectsNaNFraction() { new RingworldSunshade.Phase(0L, 0L, Double.NaN, 0.0); }
+
+	@Test(expected = IllegalArgumentException.class)
+	public void phaseRejectsOutOfRangeFraction() { new RingworldSunshade.Phase(0L, 0L, 1.1, 0.0); }
+
+	@Test(expected = IllegalArgumentException.class)
+	public void phaseRejectsInfinitePanelCenter() { new RingworldSunshade.Phase(0L, 0L, 0.5, Double.POSITIVE_INFINITY); }
     @Test
     public void constantCoverageDoesNotRequireRepresentableUnusedPeriodDimensions() {
         RingworldSunshade empty = new RingworldSunshade(20_088_001.0, 0.0, 100L, 0.0, 0.0, 0.0);
@@ -38,6 +47,22 @@ public class RingworldSunshadeTest {
                 sunshade.phase(75L, 150L, 0.0).panelCenterBlocks(), 0.0);
         assertEquals(sunshade.phase(150L, 150L, 0.0).panelCenterBlocks(),
                 sunshade.phase(75L, 150L, 1.0).panelCenterBlocks(), 0.0);
+    }
+
+    @Test
+    public void canonicalPanelOrdinalKeepsStrictHalfBoundaryAndSupportsNegativeAndHugeInterpolatedTimes() {
+        RingworldSunshade positiveHalf = new RingworldSunshade(300.0, 100.0, 100L, 150.0, 0.0, 0.0);
+        RingworldSunshade negativeHalf = new RingworldSunshade(300.0, 100.0, 100L, -150.0, 0.0, 0.0);
+        int modulus = 4093;
+        assertEquals(0, positiveHalf.canonicalPanelOrdinalResidue(positiveHalf.phase(0L, 0L, 1.0), modulus));
+        assertEquals(1, positiveHalf.canonicalPanelOrdinalResidue(positiveHalf.phase(1L, 1L, 1.0), modulus));
+        assertEquals(0, negativeHalf.canonicalPanelOrdinalResidue(negativeHalf.phase(0L, 0L, 1.0), modulus));
+        assertEquals(modulus - 1,
+                negativeHalf.canonicalPanelOrdinalResidue(negativeHalf.phase(-1L, -1L, 1.0), modulus));
+
+        RingworldSunshade.Phase hugeFraction = positiveHalf.phase(Long.MAX_VALUE - 1L, Long.MAX_VALUE, 0.5);
+        int hugeResidue = positiveHalf.canonicalPanelOrdinalResidue(hugeFraction, modulus);
+        assertTrue(hugeResidue >= 0 && hugeResidue < modulus);
     }
 
     @Test
@@ -137,6 +162,56 @@ public class RingworldSunshadeTest {
     }
 
     @Test
+    public void sideFeatherFadesOnlyInwardFromBothFiniteStripEdges() {
+        RingworldSunshade sunshade = new RingworldSunshade(10.0, 10.0, 100L, 0.0, 0.0, 0.0, 128.0);
+        RingworldSunshade.Phase phase = sunshade.phase(0L, 0L, 0.0);
+
+        assertEquals(1.0, sunshade.transmittance(0L, 0.0, -8_192.0), 0.0);
+        assertTrue(sunshade.transmittance(0L, 0.0, -8_192.0 + 1.0e-3) < 1.0);
+        assertEquals(0.5, sunshade.transmittance(0L, 0.0, -8_128.0), 0.0);
+        assertEquals(0.5, sunshade.transmittance(phase, 0.0, -8_128.0), 0.0);
+        assertEquals(0.0, sunshade.transmittance(0L, 0.0, -8_064.0), 0.0);
+        assertEquals(0.0, sunshade.transmittance(0L, 0.0, 8_064.0), 0.0);
+        assertEquals(0.5, sunshade.transmittance(0L, 0.0, 8_128.0), 0.0);
+        assertTrue(sunshade.transmittance(0L, 0.0, 8_192.0 - 1.0e-3) < 1.0);
+        assertEquals(1.0, sunshade.transmittance(0L, 0.0, 8_192.0), 0.0);
+    }
+
+    @Test
+    public void sideAndMovementFeathersCombineAsIndependentOpacityFactors() {
+        RingworldSunshade sunshade = new RingworldSunshade(20.0, 10.0, 100L, 0.0, 0.0, 2.0, 128.0);
+
+        // x=4 gives Tx=.5 and z=-8128 gives Tz=.5, so T=1-(1-Tx)*(1-Tz)=.75.
+        assertEquals(0.75, sunshade.transmittance(0L, 4.0, -8_128.0), 0.0);
+        assertEquals(0.5, sunshade.transmittance(0L, 4.0, 0.0), 0.0);
+        assertEquals(0.5, sunshade.transmittance(0L, 0.0, -8_128.0), 0.0);
+    }
+
+    @Test
+    public void sideFeatherNeverSoftensMaterialOccupancyOrExtendsThePhysicalBoard() {
+        RingworldSunshade sunshade = new RingworldSunshade(10.0, 10.0, 100L, 0.0, 0.0, 0.0, 128.0);
+        RingworldSunshade.Phase phase = sunshade.phase(0L, 0L, 0.0);
+
+        assertTrue(sunshade.sample(0L, 0.0, -8_192.0).materialOccupied());
+        assertTrue(sunshade.materialOccupied(phase, 0.0, -8_128.0));
+        assertTrue(sunshade.sample(0L, 0.0, -8_128.0).materialOccupied());
+        assertFalse(sunshade.sample(0L, 0.0, -8_192.000_001).materialOccupied());
+        assertFalse(sunshade.materialOccupied(phase, 0.0, 8_192.0));
+    }
+
+    @Test
+    public void longAndCapturedPhaseSideQueriesShareTheSameScalarField() {
+        RingworldSunshade sunshade = new RingworldSunshade(20.0, 10.0, 100L, 0.0, 0.0, 2.0, 128.0);
+        RingworldSunshade.Phase phase = sunshade.phase(0L, 0L, 0.0);
+
+        RingworldSunshade.EdgeSample sampled = sunshade.sample(0L, 4.0, -8_128.0);
+        RingworldSunshade.EdgeSample captured = sunshade.sample(phase, 4.0, -8_128.0);
+        assertEquals(sampled.transmittance(), captured.transmittance(), 0.0);
+        assertEquals(sampled.materialOccupied(), captured.materialOccupied());
+        assertEquals(sampled.transmittance(), sunshade.transmittance(phase, 4.0, -8_128.0), 0.0);
+    }
+
+    @Test
     public void noPanelIsTransparentAndFullCoverageIsOpaque() {
         RingworldSunshade noPanel = new RingworldSunshade(10.0, 0.0, 100L, 2.0, 0.0, 0.0);
         RingworldSunshade fullCoverage = new RingworldSunshade(10.0, 10.0, 100L, 2.0, 0.0, 0.0);
@@ -169,6 +244,14 @@ public class RingworldSunshadeTest {
                 () -> new RingworldSunshade(20.0, 10.0, 100L, 0.0, 0.0, 5.1));
         assertThrows(IllegalArgumentException.class,
                 () -> new RingworldSunshade(10.0, 10.0, 100L, 0.0, 0.0, 0.1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RingworldSunshade(10.0, 4.0, 100L, 0.0, 0.0, 0.0, -0.1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RingworldSunshade(10.0, 4.0, 100L, 0.0, 0.0, 0.0, 8_192.1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new RingworldSunshade(10.0, 4.0, 100L, 0.0, 0.0, 0.0, Double.NaN));
+        assertEquals(8_192.0,
+                new RingworldSunshade(10.0, 4.0, 100L, 0.0, 0.0, 0.0, 8_192.0).sideFeatherBlocks(), 0.0);
     }
 
     @Test

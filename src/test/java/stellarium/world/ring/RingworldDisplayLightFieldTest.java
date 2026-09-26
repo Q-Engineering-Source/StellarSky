@@ -1,6 +1,7 @@
 package stellarium.world.ring;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 import java.util.UUID;
 import org.junit.Test;
@@ -51,7 +52,7 @@ public class RingworldDisplayLightFieldTest {
     }
 
     @Test
-    public void subtractionMovesWithTheFrozenPhaseAndMissingPhaseIsNeutral() {
+	public void subtractionMovesWithTheFrozenPhaseAndMissingPhaseIsDarkOnlyBelowInside() {
         RingworldSunshade sunshade = new RingworldSunshade(10.0, 4.0, 100L, 0.0, 0.0, 0.0);
         RingworldDisplayLightField before = new RingworldDisplayLightField(snapshot(sunshade,
                 sunshade.phase(0L, 0L, 0.0)));
@@ -61,7 +62,9 @@ public class RingworldDisplayLightFieldTest {
 
         assertEquals(15, before.skySubtraction(0.5, 511.0, 0.5));
         assertEquals(0, after.skySubtraction(0.5, 511.0, 0.5));
-        assertEquals(0, waiting.skySubtraction(0.5, 511.0, 0.5));
+		assertEquals(15, waiting.skySubtraction(0.5, 511.0, 0.5));
+		assertEquals(0, waiting.skySubtraction(0.5, 520.0, 0.5));
+		assertEquals(0, waiting.skySubtraction(0.5, 511.0, 8192.0));
     }
 
     @Test
@@ -78,15 +81,28 @@ public class RingworldDisplayLightFieldTest {
     }
 
     @Test
-    public void stripExteriorAndMissingPhasePreserveTheCallersPackedLight() {
+    public void stripExteriorStaysNeutralWhileMissingPhaseInsideFailsDark() {
         RingworldSunshade sunshade = new RingworldSunshade(10.0, 10.0, 100L, 0.0, 0.0, 0.0);
         RingworldDisplayLightField field = new RingworldDisplayLightField(snapshot(sunshade,
                 sunshade.phase(0L, 0L, 0.0)));
         RingworldDisplayLightField waiting = new RingworldDisplayLightField(snapshot(sunshade, null));
 
         assertEquals(ORIGINAL, field.shadedPackedLight(ORIGINAL, 0.5, 511, 8_192.0));
-        assertEquals(ORIGINAL, waiting.shadedPackedLight(ORIGINAL, 0.5, 511, 0.5));
+        assertEquals(0x120000D7, waiting.shadedPackedLight(ORIGINAL, 0.5, 511, 0.5));
     }
+
+	@Test
+	public void receiverCoordinatesMustRemainFiniteAcrossNeutralFastPaths() {
+		RingworldSunshade empty = new RingworldSunshade(10.0, 0.0, 100L, 0.0, 0.0, 0.0);
+		RingworldDisplayLightField field = new RingworldDisplayLightField(snapshot(empty, null));
+
+		assertThrows(IllegalArgumentException.class,
+				() -> field.skySubtraction(Double.NaN, 520.0, 0.0));
+		assertThrows(IllegalArgumentException.class,
+				() -> field.skySubtraction(0.0, Double.POSITIVE_INFINITY, 0.0));
+		assertThrows(IllegalArgumentException.class,
+				() -> field.skySubtraction(0.0, 520.0, Double.NaN));
+	}
 
     private static RingworldDisplaySnapshot snapshot(RingworldSunshade sunshade, RingworldSunshade.Phase phase) {
         RingworldClockMirror.DisplayTime displayTime = null;

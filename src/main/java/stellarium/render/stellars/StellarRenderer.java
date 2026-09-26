@@ -6,6 +6,7 @@ import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.shader.Framebuffer;
 import stellarium.StellarSky;
 import stellarium.client.ClientSettings;
+import stellarium.client.ring.RingworldSpatialAirCompositor;
 import stellarium.render.extended.ExtendedSkyRenderer;
 import stellarium.render.stellars.access.EnumStellarPass;
 import stellarium.render.stellars.atmosphere.AtmosphereRenderer;
@@ -37,6 +38,8 @@ public enum StellarRenderer {
 	}
 
 	public void preRender(ClientSettings settings, StellarRI info) {
+		// Validate the managed framebuffer before B suppresses old atmosphere passes.
+		RingworldSpatialAirCompositor.arm(info);
 		if(!settings.lowPowerRenderer && settings.renderAtmosphere && info.atmosphereFade > 0.0) {
 			AtmosphereSettings atmSettings = (AtmosphereSettings) settings.getSubConfig(AtmosphereSettings.KEY);
 			AtmosphereRenderer.INSTANCE.preRender(atmSettings, info);
@@ -75,12 +78,15 @@ public enum StellarRenderer {
 		}
 
 		int callerFramebuffer = GlStateManager.glGetInteger(OpenGlUtil.FRAMEBUFFER_BINDING);
-		boolean atmosphereActive = settings.renderAtmosphere && info.atmosphereFade > 0.0;
+		PostProcessInputRoute postProcessInput = PostProcessInputRoute.select(
+				settings.renderAtmosphere, info.atmosphereFade,
+				info.frameOptics != null && info.frameOptics.usesSpatialAir());
+		boolean atmosphereActive = postProcessInput == PostProcessInputRoute.ATMOSPHERE_RGBE_FRAME1;
 		boolean atmospherePrepared = false;
 
 		try {
 			if(settings.renderPostProcessing)
-				postProcessor.preProcess();
+				postProcessor.preProcess(postProcessInput);
 			GlStateManager.shadeModel(GL11.GL_SMOOTH);
 			GlStateManager.blendFunc(GL11.GL_ONE, GL11.GL_ONE);
 			// TODO AX Use better value for positions
